@@ -127,8 +127,8 @@ dmypy.json
 .idea/
 
 ## my
-ckps/
-datasets/
-data/
-bert_pretrained/
-preds/
+ckps/*
+datasets/*
+data/*
+bert_pretrained/*
+preds/*
