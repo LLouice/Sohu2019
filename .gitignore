@@ -126,9 +126,15 @@ dmypy.json
 ## pycharm
 .idea/
 
+## vim
+*.swp
+*.swo
+
 ## my
 ckps/*
 datasets/*
 data/*
 bert_pretrained/*
 preds/*
+!*.gitkeep
+
