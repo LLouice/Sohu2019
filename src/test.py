@@ -41,7 +41,7 @@ def run():
     model = torch.nn.DataParallel(model)
 
     # ------------------------------ load model from file -------------------------
-    model_file = "../ckps/best_model.pth"
+    model_file = os.path.join("../ckps", args.best_model)
     if os.path.exists(model_file):
         model.load_state_dict(torch.load(model_file))
         print("load checkpoint: {} successfully!".format(model_file))
@@ -107,9 +107,13 @@ if __name__ == '__main__':
                              "bert-base-multilingual-cased, bert-base-chinese.")
     parser.add_argument('--test_batch_size', type=int, default=1000,
                         help='input batch size for test (default: 1000)')
+    parser.add_argument("--best_model",
+                        default="best_model.pt",
+                        type=str, required=True)
     parser.add_argument("--pred",
-                        default="../preds/pred_new.h5",
+                        default="pred_new.h5",
                         type=str, required=False)
+
 
     args = parser.parse_args()
 

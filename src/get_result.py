@@ -58,13 +58,13 @@ def main():
     # ------------------------------------- args ----------------------------------------
     parser = argparse.ArgumentParser()
     parser.add_argument("--res",
-                        default="../results/result_new.txt",
+                        default="result_new.txt",
                         type=str,
                         required=False,
                         help="result file")
 
     parser.add_argument("--pred",
-                        default="../preds/pred_new.h5",
+                        default="pred_new.h5",
                         type=str, required=False)
     args = parser.parse_args()
     # ------------------------------------------------------------------------------
