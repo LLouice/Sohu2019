@@ -285,7 +285,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                                 if mytok not in TOK2ID:
                                     TOK2ID[mytok] = len(TOK2ID)
                 if SAMESPLIT:
-                    print(word, token, mytoken, sep="\t")
+                    print(f"guid: {example.guid}, title: {example.text_title}",word, token, mytoken, sep="\t")
                 tokens.extend(token)
                 mytokens.extend(mytoken)
                 assert len(tokens) == len(mytokens)
