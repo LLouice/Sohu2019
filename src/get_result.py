@@ -66,9 +66,6 @@ def main():
     parser.add_argument("--pred",
                         default="../preds/pred_new.h5",
                         type=str, required=False)
-    parser.add_argument("--lite",
-                        action="store_true",
-                        help="")
     args = parser.parse_args()
     # ------------------------------------------------------------------------------
     # ------------------------------- output file ----------------------------------
@@ -78,12 +75,8 @@ def main():
     f_pred = h5py.File(pred_file, "r")
     # ------------------------------------------------------------------------------
     # -------------------------------- test data -----------------------------------
-    if not args.lite:
-        NEWS_MAP = load_data("../datasets/news_map.pkl")
-        test_file = "../datasets/train.h5"
-    else:
-        NEWS_MAP = load_data("../datasets/lite_news_map.pkl")
-        test_file = "../datasets/lite.h5"
+    NEWS_MAP = load_data("../datasets/news_map.pkl")
+    test_file = "../datasets/full.h5"
 
     f_test = h5py.File(test_file, "r")
     IDs = f_test.get("test/IDs")[()]

@@ -12,6 +12,7 @@
    >> 2/8 2/8 分成 full lite 对应的
             train.txt val.txt 和 lite_trn.txt lite_val.txt
    - data_title_trnval.py data_title_test.py
-   > 从 train.txt val.txt 或者 lite_trn.txt lite_val.txt  test.txt lite_test.txt
+   > 从 train.txt val.txt 或者 lite_trn.txt lite_val.txt  test.txt 
    >> 生成 tensor 序列化文件 train.h5 lite.h5 和 ID2TOK.pkl(trn val test 所有的 ID2TOK)
-   >>> h5 包括3个数据集 train val test
+   >>> full.h5 包括3个数据集 train val test
+   >>> lite.h5 包括2个数据集 trina val

@@ -11,10 +11,7 @@ from models import NetX3
 def get_test_dataloader():
     print("get test dataloader...........")
     # -------------------------------read from h5-------------------------
-    if not args.lite:
-        f = h5py.File("../datasets/trian.h5", "r")
-    else:
-        f = h5py.File("../datasets/lite.h5", "r")
+    f = h5py.File("../datasets/full.h5", "r")
     input_ids = torch.from_numpy(f["test/input_ids"][()])
     input_mask = torch.from_numpy(f["test/input_mask"][()])
     segment_ids = torch.from_numpy(f["test/segment_ids"][()])
@@ -113,9 +110,6 @@ if __name__ == '__main__':
     parser.add_argument("--pred",
                         default="../preds/pred_new.h5",
                         type=str, required=False)
-    parser.add_argument("--lite",
-                        action="store_true",
-                        help="")
 
     args = parser.parse_args()
 

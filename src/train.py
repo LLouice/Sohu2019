@@ -31,7 +31,7 @@ def get_data_loader():
     print("get data loader...........")
     # -------------------------------read from h5-------------------------
     if not args.lite:
-        f = h5py.File("../datasets/train.h5")
+        f = h5py.File("../datasets/full.h5")
     else:
         f = h5py.File("../datasets/lite.h5")
     input_ids = torch.from_numpy(f["train/input_ids"][()])
@@ -361,11 +361,11 @@ if __name__ == '__main__':
                         help='how many batches to wait before logging training status')
     parser.add_argument("--log_dir", type=str, default="tbs",
                         help="log directory for Tensorboard log output")
-    parser.add_argument("--checkpoint_model_dir", type=str, default='checkpoints_lite',
+    parser.add_argument("--checkpoint_model_dir", type=str, default='ckps',
                         help="path to folder where checkpoints of trained models will be saved")
-    parser.add_argument("--ckps", type=str, default='None',
+    parser.add_argument("--ckp", type=str, default='None',
                         help="ckp file")
-    parser.add_argument("--hyper_cfg", type=str, default='a_1_lr_3',
+    parser.add_argument("--hyper_cfg", type=str, default='default',
                         help="config path to folder where checkpoints of trained models will be saved")
     parser.add_argument("--checkpoint_interval", type=int, default=1,
                         help="number of batches after which a checkpoint of trained model will be created")

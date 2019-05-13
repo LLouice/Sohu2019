@@ -133,14 +133,10 @@ class DataProcessor(object):
 class NerProcessor(DataProcessor):
     """Processor for the CoNLL-2003 data set."""
 
-    def get_test_examples(self, data_dir, islite):
+    def get_test_examples(self, data_dir):
         """See base class."""
-        if not islite:
-            return self._create_examples(
-                self._read_tsv(os.path.join(data_dir, "test.txt")), "test")
-        else:
-            return self._create_examples(
-                self._read_tsv(os.path.join(data_dir, "lite_test")), "test")
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.txt")), "test")
 
     def get_labels(self):
         return ["O", "B-POS", "I-POS", "B-NEG", "I-NEG", "B-NORM", "I-NORM", "X", "[CLS]", "[SEP]"]
@@ -370,9 +366,6 @@ def main():
                         type=int,
                         default=42,
                         help="random seed for initialization")
-    parser.add_argument("--lite",
-                        action='store_true',
-                        help="is lite")
     args = parser.parse_args()
     logger.info("data_dir: {}".format(args.data_dir))
 
@@ -396,7 +389,7 @@ def main():
     TOK2ID = OrderedDict((tok, id) for id, tok in ID2TOK.items())
 
     logger.info("in do_test now")
-    test_examples = processor.get_test_examples(args.data_dir, args.lite)
+    test_examples = processor.get_test_examples(args.data_dir)
     test_features = convert_examples_to_features(
         test_examples, label_list, args.max_seq_length, tokenizer, TOK2ID)
     logger.info("***** Running on Test *****")
@@ -407,10 +400,7 @@ def main():
     all_myinput_ids = torch.tensor([f.myinput_ids for f in test_features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in test_features], dtype=torch.long)
 
-    if not args.lite:
-        f = h5py.File("../datasets/train.h5", "r+", libver="latest")
-    else:
-        f = h5py.File("../datasets/lite.h5", "r+", libver="latest")
+    f = h5py.File("../datasets/full.h5", "r+", libver="latest")
     f.create_dataset("test/IDs", data=all_IDs, compression="gzip")
     f.create_dataset("test/input_ids", data=all_input_ids, compression="gzip")
     f.create_dataset("test/myinput_ids", data=all_myinput_ids, compression="gzip")

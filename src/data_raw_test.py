@@ -10,27 +10,18 @@ file = "../datasets/news_test.pkl"
 data = load_data(file)
 print("all data: ", len(data))
 
-# 先分成 full lite 两大部分
-_, lite = train_test_split(data, test_size=0.1)
 
-def gen_news_map(data, mode="all"):
+def gen_news_map(data):
     D = {}
-    for i,news in enumerate(data):
+    for i, news in enumerate(data):
         ID = news["newsId"]
         D[i] = ID
-    if mode == "all":
-        data_dump(D, "../datasets/news_map.pkl")
-    else:
-        data_dump(D, "../datasets/lite_news_map.pkl")
+    data_dump(D, "../datasets/news_map.pkl")
 
 
-
-def data2txt(data, mode="all"):
+def data2txt(data):
     print("cur data: ", len(data))
-    if mode == "all":
-        file = "../datasets/test.txt"
-    else:
-        file = "../datasets/lite_test.txt"
+    file = "../datasets/test.txt"
     f = open(file, "w")
     count = 0
     for news in data:
@@ -56,9 +47,6 @@ def data2txt(data, mode="all"):
     print(count)
 
 
-# lite
-data2txt(lite, "val")
-gen_news_map(lite, "val")
 # all
 data2txt(data)
 gen_news_map(data)

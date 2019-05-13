@@ -507,7 +507,7 @@ def main():
     logger.info("  Num examples = %d", len(train_features))
     ################################ save2h5 ########################################
     if not args.lite:
-        f = h5py.File("../datasets/train.h5", "w", libver="latest")
+        f = h5py.File("../datasets/full.h5", "w", libver="latest")
     else:
         f = h5py.File("../datasets/lite.h5", "w", libver="latest")
     # free memory!!
