@@ -3,7 +3,7 @@ set -eux
 export CUDA_VISIBLE_DEVICE=0,1
 test_batch_size=500
 best_model="best_model.pt.bak"
-pred="perd_new.pkl"
+pred="pred_new.h5"
 
 
 cd ../.
