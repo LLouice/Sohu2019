@@ -65,8 +65,9 @@ def run():
 
     # ++++++++++++++++++++++++++++++++++ Test +++++++++++++++++++++++++++++++++
     f = h5py.File(f"../preds/{args.pred}", "w")
-    ent_raw = f.create_dataset("ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
-    emo_raw = f.create_dataset("emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
+    if args.raw:
+        ent_raw = f.create_dataset("ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
+        emo_raw = f.create_dataset("emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
     ent = f.create_dataset("ent", shape=(0, 128), maxshape=(None, 128), compression="gzip")
     emo = f.create_dataset("emo", shape=(0, 128), maxshape=(None, 128), compression="gzip")
 
@@ -80,12 +81,13 @@ def run():
         old_size = ent.shape[0]
         ent.resize(old_size + batch_size, axis=0)
         emo.resize(old_size + batch_size, axis=0)
-        ent_raw.resize(old_size + batch_size, axis=0)
-        emo_raw.resize(old_size + batch_size, axis=0)
         ent[old_size: old_size + batch_size] = pred_ent.cpu()
         emo[old_size: old_size + batch_size] = pred_emo.cpu()
-        ent_raw[old_size: old_size + batch_size] = pred_ent_raw.cpu()
-        emo_raw[old_size: old_size + batch_size] = pred_emo_raw.cpu()
+        if args.raw:
+            ent_raw.resize(old_size + batch_size, axis=0)
+            emo_raw.resize(old_size + batch_size, axis=0)
+            ent_raw[old_size: old_size + batch_size] = pred_ent_raw.cpu()
+            emo_raw[old_size: old_size + batch_size] = pred_emo_raw.cpu()
 
     pbar_test = ProgressBar(persist=True)
     pbar_test.attach(tester)
@@ -113,6 +115,10 @@ if __name__ == '__main__':
     parser.add_argument("--pred",
                         default="pred_new.h5",
                         type=str, required=False)
+    parser.add_argument("--raw",
+                        action="store_true",
+                        help="是否存储置信度")
+
 
 
     args = parser.parse_args()
