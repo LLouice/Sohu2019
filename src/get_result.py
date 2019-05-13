@@ -7,29 +7,12 @@ from utils import load_data, covert_myids_to_mytokens
 import time
 
 EMOS_MAP = {"0": "OTHER", "1": "POS", "2": "NEG", "3": "NORM"}
-NEWS_MAP = load_data("../datasets/news_map.pkl")
 ID2TOK = load_data("../datasets/ID2TOK.pkl")
-
-test_file = "../datasets/train.h5"
-
-f_test = h5py.File(test_file, "r")
-
-IDs = f_test.get("test/IDs")[()]
-# input_ids = f_test.get("test/input_ids")[()]
-myinput_ids = f_test.get("test/myinput_ids")[()]
-input_mask = f_test.get("test/input_mask")[()]
-segement_ids = f_test.get("test/segment_ids")[()]
-
-unique_IDs = np.unique(IDs)
-assert np.max(unique_IDs) < 40000
-
 pattern = re.compile("1[2]*")  # 贪婪匹配
+######################################################################################
 
 
-###############################################################
-
-
-def _get_res(cur_input_ids, cur_myinput_ids, cur_pred_ent, cur_pred_ent_conf, cur_pred_emo, cur_perd_emo_conf, S):
+def _get_res(cur_input_ids, cur_myinput_ids, cur_pred_ent, cur_pred_ent_conf, cur_pred_emo, cur_pred_emo_conf, S):
     '''
     :param cur_myinput_ids:
     :param cur_pred_ent:
@@ -83,6 +66,9 @@ def main():
     parser.add_argument("--pred",
                         default="../preds/pred_new.h5",
                         type=str, required=False)
+    parser.add_argument("--lite",
+                        action="store_true",
+                        help="")
     args = parser.parse_args()
     # ------------------------------------------------------------------------------
     # ------------------------------- output file ----------------------------------
@@ -90,6 +76,23 @@ def main():
     pred_file = f"../preds/{args.pred}"
     f_result = open(result_file, "wt")
     f_pred = h5py.File(pred_file, "r")
+    # ------------------------------------------------------------------------------
+    # -------------------------------- test data -----------------------------------
+    if not args.lite:
+        NEWS_MAP = load_data("../datasets/news_map.pkl")
+        test_file = "../datasets/train.h5"
+    else:
+        NEWS_MAP = load_data("../datasets/lite_news_map.pkl")
+        test_file = "../datasets/lite.h5"
+
+    f_test = h5py.File(test_file, "r")
+    IDs = f_test.get("test/IDs")[()]
+    # input_ids = f_test.get("test/input_ids")[()]
+    myinput_ids = f_test.get("test/myinput_ids")[()]
+    input_mask = f_test.get("test/input_mask")[()]
+    segement_ids = f_test.get("test/segment_ids")[()]
+    unique_IDs = np.unique(IDs)
+    assert np.max(unique_IDs) == len(IDs) - 1
     # ------------------------------------------------------------------------------
     # -------------------------------- pred data -----------------------------------
     pred_ent = f_pred.get("ent")[()]
