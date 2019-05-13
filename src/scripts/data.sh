@@ -12,4 +12,4 @@ python -u data_title_trnval.py &>>  ../logs/data.log
 
 python -u data_title_test.py &>>  ../logs/data.log
 
-ehco "over!"
+echo "over!"
