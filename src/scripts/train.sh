@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -eux
+
+bs=48
+val_bs=48
+epos=5
+lr=3e-5
+alpha=1
+warm=0.1
+dp=0.2
+
+run_lite(){
+    python -u trian.py \
+        --lr=${lr} \
+        --batch_size=${bs} \
+        --val_batch_size=${val_bs} \
+        --epochs=${epos} \
+        --alpha=${alpha} \
+        --warmup_proportion=${warm} \
+        --dp=${dp} \
+        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_lite \
+        --lite \
+        &>> ../../logs/lite.log
+}
+run_full(){
+    python -u trian.py \
+        --lr=${lr} \
+        --batch_size=${bs} \
+        --val_batch_size=${val_bs} \
+        --epochs=${epos} \
+        --alpha=${alpha} \
+        --warmup_proportion=${warm} \
+        --dp=${dp} \
+        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_lite \
+        &>> ../../logs/full.log
+}
+
+run_lite
