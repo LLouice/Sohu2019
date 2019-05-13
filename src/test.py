@@ -1,6 +1,4 @@
 import os
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 import h5py
 from argparse import ArgumentParser
 import torch
@@ -13,7 +11,10 @@ from models import NetX3
 def get_test_dataloader():
     print("get test dataloader...........")
     # -------------------------------read from h5-------------------------
-    f = h5py.File("../datasets/data_test.h5", "r")
+    if not args.lite:
+        f = h5py.File("../datasets/trian.h5", "r")
+    else:
+        f = h5py.File("../datasets/lite.h5", "r")
     input_ids = torch.from_numpy(f["test/input_ids"][()])
     input_mask = torch.from_numpy(f["test/input_mask"][()])
     segment_ids = torch.from_numpy(f["test/segment_ids"][()])
@@ -43,7 +44,7 @@ def run():
     model = torch.nn.DataParallel(model)
 
     # ------------------------------ load model from file -------------------------
-    model_file = "ckp/best_model.pth"
+    model_file = "../ckps/best_model.pth"
     if os.path.exists(model_file):
         model.load_state_dict(torch.load(model_file))
         print("load checkpoint: {} successfully!".format(model_file))
@@ -66,7 +67,7 @@ def run():
     pbar_test.attach(tester)
 
     # ++++++++++++++++++++++++++++++++++ Test +++++++++++++++++++++++++++++++++
-    f = h5py.File("../datasets/pred.h5", "w")
+    f = h5py.File(f"../preds/{args.pred}", "w")
     ent_raw = f.create_dataset("ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
     emo_raw = f.create_dataset("emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
     ent = f.create_dataset("ent", shape=(0, 128), maxshape=(None, 128), compression="gzip")
@@ -89,14 +90,16 @@ def run():
         ent_raw[old_size: old_size + batch_size] = pred_ent_raw.cpu()
         emo_raw[old_size: old_size + batch_size] = pred_emo_raw.cpu()
 
-    pbar = ProgressBar(persist=True)
+    pbar_test = ProgressBar(persist=True)
     pbar_test.attach(tester)
+
     @tester.on(Events.EPOCH_COMPLETED)
     def close_h5(engine):
         print("test over")
         f.close()
 
     tester.run(test_dataloader)
+
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -107,6 +110,12 @@ if __name__ == '__main__':
                              "bert-base-multilingual-cased, bert-base-chinese.")
     parser.add_argument('--test_batch_size', type=int, default=1000,
                         help='input batch size for test (default: 1000)')
+    parser.add_argument("--pred",
+                        default="../preds/pred_new.h5",
+                        type=str, required=False)
+    parser.add_argument("--lite",
+                        action="store_true",
+                        help="")
 
     args = parser.parse_args()
 

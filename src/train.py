@@ -1,5 +1,4 @@
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import h5py
 from argparse import ArgumentParser
 import torch
@@ -31,7 +30,10 @@ from loss import FocalLoss
 def get_data_loader():
     print("get data loader...........")
     # -------------------------------read from h5-------------------------
-    f = h5py.File(args.data)
+    if not args.lite:
+        f = h5py.File("../datasets/train.h5")
+    else:
+        f = h5py.File("../datasets/lite.h5")
     input_ids = torch.from_numpy(f["train/input_ids"][()])
     myinput_ids = torch.from_numpy(f["train/myinput_ids"][()])
     input_mask = torch.from_numpy(f["train/input_mask"][()])
@@ -42,12 +44,12 @@ def get_data_loader():
     print("train dataset num: ", input_ids.size(0))
     trn_dataset = TensorDataset(input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids)
 
-    input_ids = torch.from_numpy(f["dev/input_ids"][()])
-    myinput_ids = torch.from_numpy(f["dev/myinput_ids"][()])
-    input_mask = torch.from_numpy(f["dev/input_mask"][()])
-    segment_ids = torch.from_numpy(f["dev/segment_ids"][()])
-    label_ent_ids = torch.from_numpy(f["dev/label_ent_ids"][()])
-    label_emo_ids = torch.from_numpy(f["dev/label_emo_ids"][()])
+    input_ids = torch.from_numpy(f["val/input_ids"][()])
+    myinput_ids = torch.from_numpy(f["val/myinput_ids"][()])
+    input_mask = torch.from_numpy(f["val/input_mask"][()])
+    segment_ids = torch.from_numpy(f["val/segment_ids"][()])
+    label_ent_ids = torch.from_numpy(f["val/label_ent_ids"][()])
+    label_emo_ids = torch.from_numpy(f["val/label_emo_ids"][()])
     assert input_ids.size() == segment_ids.size() == label_ent_ids.size() == label_emo_ids.size() == myinput_ids.size()
     val_dataset = TensorDataset(input_ids,myinput_ids ,input_mask, segment_ids, label_ent_ids, label_emo_ids)
     print("val dataset num: ", input_ids.size(0))
@@ -274,20 +276,6 @@ def train():
 
     ######################################################################
 
-    ############################## KeyboardInterrupt ###################################
-    ''''
-    @val_evaluator.on(Events.EXCEPTION_RAISED)
-    def handle_exception(engine, e):
-        if isinstance(e, KeyboardInterrupt) and (engine.state.iteration > 1):
-            engine.terminate()
-            warnings.warn('KeyboardInterrupt caught. Exiting gracefully.')
-            checkpoint_handler(engine, {
-                'Net0_exception': model,
-            })
-        else:
-            raise e
-    '''
-    ######################################################################
 
     #################################### tb logger ##################################
     # 在已经在对应基础上计算了 metric 的值 (compute_metric) 后 取值 log
@@ -351,11 +339,7 @@ def train():
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("--data", default="",
-                        type=str, required=False,
-                        help="data")
-    parser.add_argument("--bert_model", default="/home/lzk/llouice/.pytorch_pretrained_bert/bert-base-chinese",
-                        type=str, required=False,
+    parser.add_argument("--bert_model", default="../bert_pretrained/bert-base-chinese", type=str,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
@@ -379,7 +363,7 @@ if __name__ == '__main__':
                         help="log directory for Tensorboard log output")
     parser.add_argument("--checkpoint_model_dir", type=str, default='checkpoints_lite',
                         help="path to folder where checkpoints of trained models will be saved")
-    parser.add_argument("--ckp", type=str, default='None',
+    parser.add_argument("--ckps", type=str, default='None',
                         help="ckp file")
     parser.add_argument("--hyper_cfg", type=str, default='a_1_lr_3',
                         help="config path to folder where checkpoints of trained models will be saved")
@@ -399,6 +383,9 @@ if __name__ == '__main__':
                         type=float,
                         help="")
     parser.add_argument("--focal",
+                        action="store_true",
+                        help="")
+    parser.add_argument("--lite",
                         action="store_true",
                         help="")
 

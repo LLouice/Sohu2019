@@ -1,23 +1,13 @@
 from ignite.metrics.metric import Metric
 import re
 import torch
-from sklearn.metrics import f1_score
-from pytorch_pretrained_bert.tokenization import BertTokenizer
 from utils import covert_myids_to_mytokens, load_data, data_dump
-import os
 import numpy as np
 from collections import defaultdict, Counter
 
-# ID2TOK = load_data("../datasets/ID2TOK_lite.pkl")
-# ID2TOK = load_data("../datasets/ID2TOK_lite.pkl")
-# ID2TOK = load_data("../datasets/ID2TOK_full.pkl")
-# ID2TOK = load_data("../datasets/ID2TOK_one_last_lite.pkl")
-ID2TOK = load_data("../datasets/ID2TOK_one_last_full.pkl")
+ID2TOK = load_data("../datasets/ID2TOK.pkl")
 
 
-# ID2TOK = load_data("../datasets/ID2TOK_one_last_full.pkl")
-
-# bert_token_model = "/home/lzk/llouice/.pytorch_pretrained_bert/8a0c070123c1f794c42a29c6904beb7c1b8715741e235bee04aca2c7636fc83f.9b42061518a39ca00b8b52059fd2bede8daa613f8a8671500e518a8c29de8c00"
 
 class FScore(Metric):
     """
