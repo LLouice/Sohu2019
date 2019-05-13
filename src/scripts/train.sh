@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -eux
+export CUDA_VISIBLE_DEVICE=0,1
 
 bs=48
 val_bs=48
@@ -8,6 +9,8 @@ lr=3e-5
 alpha=1
 warm=0.1
 dp=0.2
+
+cd ..
 
 run_lite(){
     python -u trian.py \
