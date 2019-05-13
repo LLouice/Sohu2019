@@ -5,20 +5,31 @@ from sklearn.model_selection import train_test_split
 将新闻和标记写入txt文件
 每一个句子空一行 没一则新闻空两行
 '''
-# file = "/home/lzk/smy/sohu/data_process/new_data2/train_ner_has_emotion.pkl"
+# TODO smy 生成更大的 news.pkl
 file = "../datasets/train_ner_has_emotion.pkl"
 
 data = load_data(file)
 print(len(data))
 
-trn_data,val_data = train_test_split(data, test_size=0.2)
+# 先分成 full lite 两大部分
+full, lite = train_test_split(data, test_size=0.2)
+
+# 再各自分成 trn 和 val
+full_trn, full_val = train_test_split(full, test_size=0.2)
+lite_trn, lite_val = train_test_split(lite, test_size=0.2)
 
 
-def data2txt(data, mode="train"):
-    if mode == "train":
-        file = "../datasets/train_full.txt"
+def data2txt(data, mode="train", size="lite"):
+    if size == "lite":
+        trn_txt = "../datasets/lite_trn.txt"
+        val_txt = "../datasets/lite_val.txt"
     else:
-        file = "../datasets/dev_full.txt"
+        trn_txt = "../datasets/train.txt"
+        val_txt = "../datasets/val.txt"
+    if mode == "train":
+        file = trn_txt
+    else:
+        file = val_txt
     f = open(file, "w")
     count = 0
     for news in data:
@@ -26,10 +37,6 @@ def data2txt(data, mode="train"):
         title_O = news["title"][1]
         contents = news["content"]
         for (t, tO) in zip(title, title_O):
-            # if len(t) > 1:
-            #     new_t = seg_char(t)
-            #     if len(new_t)>1:
-            #         pass
             line = " ".join((t, tO))
             f.write(line)
             f.write("\n")
@@ -42,15 +49,17 @@ def data2txt(data, mode="train"):
             f.write("\n")
         # 下一新闻
         f.write("\n")
-        count+=1
+        count += 1
         # if count > 2:
         #     break
     f.close()
     print(count)
-# data2txt(data[:34000])
-# data2txt(data[34000:], "val")
-data2txt(trn_data)
-data2txt(val_data, "val")
+
+
+# lite
+data2txt(lite_trn)
+data2txt(lite_val, "val")
+# full
+data2txt(full_trn, size="full")
+data2txt(full_val, mode="val", size="full")
 print("over")
-
-
