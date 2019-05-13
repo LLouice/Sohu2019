@@ -9,6 +9,7 @@ lr=3e-5
 alpha=1
 warm=0.1
 dp=0.2
+wd=0.01
 
 cd ..
 
@@ -21,7 +22,8 @@ run_lite(){
         --alpha=${alpha} \
         --warmup_proportion=${warm} \
         --dp=${dp} \
-        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_lite \
+        --wd=${wd} \
+        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wd_${wd}_lite \
         --lite \
         &>> ../../logs/lite.log
 }
@@ -34,7 +36,8 @@ run_full(){
         --alpha=${alpha} \
         --warmup_proportion=${warm} \
         --dp=${dp} \
-        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_lite \
+        --wd=${wd} \
+        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wc_${wd}_lite \
         &>> ../../logs/full.log
 }
 
