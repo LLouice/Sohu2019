@@ -5,14 +5,13 @@ from sklearn.model_selection import train_test_split
 将新闻和标记写入txt文件
 每一个句子空一行 没一则新闻空两行
 '''
-# TODO smy 生成更大的 news.pkl
-file = "../datasets/train_ner_has_emotion.pkl"
+file = "../datasets/news.pkl"
 
 data = load_data(file)
 print(len(data))
 
 # 先分成 full lite 两大部分
-full, lite = train_test_split(data, test_size=0.2)
+full, lite = train_test_split(data, test_size=0.1)
 
 # 再各自分成 trn 和 val
 full_trn, full_val = train_test_split(full, test_size=0.2)

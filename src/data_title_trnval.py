@@ -4,7 +4,6 @@ import argparse
 import logging
 import os
 import random
-import pickle
 
 import numpy as np
 import torch
@@ -13,25 +12,12 @@ import h5py
 import gc
 from collections import OrderedDict
 import re
-from utils import covert_mytokens_to_myids
+from utils import covert_mytokens_to_myids, load_data, data_dump
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def data_dump(data, file):
-    with open(file, "wb") as f:
-        pickle.dump(data, f)
-    logger.info("store {} successfully!".format(file))
-
-
-def load_data(path):
-    with open(path, "rb") as f:
-        res = pickle.load(f)
-    logger.info("load data from {} successfully!".format(path))
-    return res
 
 
 class InputExample(object):
@@ -68,10 +54,6 @@ class InputFeatures(object):
 
 
 def readfile(filename):
-    '''
-    read file
-    return format :
-    '''
     logger.info("read file:{}....".format(filename))
     data = []
 
@@ -132,11 +114,11 @@ def readfile(filename):
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, islite):
         """Gets a collection of `InputExample`s for the train set."""
         raise NotImplementedError()
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, islite):
         """Gets a collection of `InputExample`s for the dev set."""
         raise NotImplementedError()
 
@@ -153,20 +135,23 @@ class DataProcessor(object):
 class NerProcessor(DataProcessor):
     """Processor for the CoNLL-2003 data set."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, islite):
         """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train_full.txt")), "train")
+        if not islite:
+            return self._create_examples(
+                self._read_tsv(os.path.join(data_dir, "train.txt")), "train")
+        else:
+            return self._create_examples(
+                self._read_tsv(os.path.join(data_dir, "lite_trn.txt")), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, islite):
         """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev_full.txt")), "dev")
-
-    def get_test_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test.txt")), "test")
+        if not islite:
+            return self._create_examples(
+                self._read_tsv(os.path.join(data_dir, "val.txt")), "train")
+        else:
+            return self._create_examples(
+                self._read_tsv(os.path.join(data_dir, "lite_val.txt")), "train")
 
     def get_labels(self):
         return ["O", "B-POS", "I-POS", "B-NEG", "I-NEG", "B-NORM", "I-NORM", "X", "[CLS]", "[SEP]"]
@@ -203,7 +188,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, mytokens_a, mytokens_b, labels_A, lab
             labels_B.pop()
 
 
-def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer, TOK2ID):
+def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer, TOK2ID, lbl_method):
     """Loads a data file into a list of `InputBatch`s."""
 
     logger.info("gen features...")
@@ -225,6 +210,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         tokens_B = []
         mytokens_B = []
         labels_B = []
+
         # if count == 529320:
         #     pdb.set_trace()
         ####################### tokenize ##########################
@@ -266,7 +252,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                     not_unks = [tok for tok in mytoken if tok != "[UNK]"]
                     if not_unks:
                         not_unks = [re.escape(nu) for nu in not_unks]
-                        if not(len(set(not_unks)) ==  1 and len(not_unks) > 1): # 全是同一个字符，会无限循环
+                        if not (len(set(not_unks)) == 1 and len(not_unks) > 1):  # 全是同一个字符，会无限循环
                             pattern = "(.*)".join(not_unks)
                             pattern = re.compile("(.*)" + pattern + "(.*)")
                         else:
@@ -274,10 +260,10 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                             print(word)
                             f = "([^{}]*)".format(not_unks[0])
                             pattern = f.join(not_unks)
-                            pattern = re.compile(f+pattern+f)
+                            pattern = re.compile(f + pattern + f)
                         for res in pattern.findall(word):
                             for r in res:
-                                if len(r)>0 and r!="\u202a": #whitespace!!
+                                if len(r) > 0 and r != "\u202a":  # whitespace!!
                                     if r not in TOK2ID:
                                         TOK2ID[r] = len(TOK2ID)
                                     mytoken[unks_index[-1]] = r
@@ -286,7 +272,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                     else:
                         # 理论上应该是单个 如 4G  但是很奇怪分字有问题这里 如不了
                         # assert len(token) == 1
-                        if len(token) == 1 :
+                        if len(token) == 1:
                             if word not in TOK2ID:
                                 TOK2ID[word] = len(TOK2ID)
                             mytoken[0] = word
@@ -309,7 +295,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                     # else:
                     #     labels.append("X")
                     if label_1 == "B-POS":
-                        if m==0:
+                        if m == 0:
                             labels.append(label_1)
                         else:
                             labels.append("I-POS")
@@ -369,41 +355,46 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         # 这里可能有两种emo标法 只标 B 或者 BI都标, 这里使用后者,即上面所示
         L = np.array(label_ids)
 
-        L[L == 10] = 0
-        L[L == 9] = 0
-        L[L == 8] = 0
-        L[L == 1] = 0
+        if lbl_method == "BIO":
+            L[L == 10] = 0
+            L[L == 9] = 0
+            L[L == 8] = 0
+            L[L == 1] = 0
 
-        L[L == 2] = 1
-        L[L == 3] = 1
-        L[L == 4] = 2
-        L[L == 5] = 2
-        L[L == 6] = 3
-        L[L == 7] = 3
-        label_emo_ids = L.tolist()
-        # ------------------
-        L = np.array(label_ids)
-        ''''
-        带 PAD X [CLS] 标法
-        L[L==4]=2
-        L[L==6]=2
-        L[L==5]=3
-        L[L==7]=3
-        L[L==8]=4
-        L[L==9]=5
-        L[L==10]=6
-        '''
-        L[L == 1] = 0
-        L[L == 2] = 1
-        L[L == 4] = 1
-        L[L == 6] = 1
-        L[L == 3] = 2
-        L[L == 5] = 2
-        L[L == 7] = 2
-        L[L == 8] = 0
-        L[L == 9] = 0
-        L[L == 10] = 0
-        label_ent_ids = L.tolist()
+            L[L == 2] = 1
+            L[L == 3] = 1
+            L[L == 4] = 2
+            L[L == 5] = 2
+            L[L == 6] = 3
+            L[L == 7] = 3
+            label_emo_ids = L.tolist()
+            # ------------------
+            L = np.array(label_ids)
+            ''''
+            带 PAD X [CLS] 标法
+            L[L==4]=2
+            L[L==6]=2
+            L[L==5]=3
+            L[L==7]=3
+            L[L==8]=4
+            L[L==9]=5
+            L[L==10]=6
+            '''
+            L[L == 1] = 0
+            L[L == 2] = 1
+            L[L == 4] = 1
+            L[L == 6] = 1
+            L[L == 3] = 2
+            L[L == 5] = 2
+            L[L == 7] = 2
+            L[L == 8] = 0
+            L[L == 9] = 0
+            L[L == 10] = 0
+            label_ent_ids = L.tolist()
+        elif lbl_method == "BIESO":
+            pass
+        else:
+            pass
 
         #######################################################################
 
@@ -438,28 +429,17 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
     logger.info("finish features gen")
 
-
     return features
 
 
 def main():
     parser = argparse.ArgumentParser()
-    '''
-    --data_dir=/home/lzk/llouice/BERT/souhu/BERT-NER-master/lite/data_lite
-    --parent_dir=/home/lzk/llouice/BERT/souhu/BERT-NER-master/lite
-    --do_train
-    --do_eval
-    '''
-    ## Required parameters
     parser.add_argument("--data_dir",
-                        default=None,
+                        default="../datasets",
                         type=str,
-                        required=True,
+                        required=False,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    parser.add_argument("--bert_model", default="bert_pretrained/bert-base-chinese", type=str,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                             "bert-base-multilingual-cased, bert-base-chinese.")
+
     parser.add_argument("--bert_token_model",
                         default="bert_pretrained/bert_token_model",
                         type=str, required=False)
@@ -468,11 +448,6 @@ def main():
                         type=str,
                         required=False,
                         help="The name of the task to train.")
-    parser.add_argument("--parent_dir",
-                        default=".",
-                        type=str,
-                        required=True,
-                        help="The output directory where the model predictions and checkpoints will be written.")
 
     ## Other parameters
     parser.add_argument("--cache_dir",
@@ -492,9 +467,16 @@ def main():
                         type=int,
                         default=42,
                         help="random seed for initialization")
+    parser.add_argument("--lite",
+                        action='store_true',
+                        help="is lite")
+    parser.add_argument("--label_method",
+                        default="BIO",
+                        type=str,
+                        required=False,
+                        help="标注格式 BIO BIESO 等")
     args = parser.parse_args()
     logger.info("data_dir: {}".format(args.data_dir))
-    logger.info("parent_dir: {}".format(args.parent_dir))
 
     processors = {"ner": NerProcessor}
 
@@ -511,22 +493,23 @@ def main():
     label_list = processor.get_labels()
     tokenizer = BertTokenizer.from_pretrained(args.bert_token_model, do_lower_case=args.do_lower_case)
 
-    ID2TOK = tokenizer.ids_to_tokens
+    if not os.path.exists("../datasets/ID2TOK.pkl"):
+        ID2TOK = tokenizer.ids_to_tokens
+    else:
+        ID2TOK = load_data("../datasets/ID2TOK.pkl")
     TOK2ID = OrderedDict((tok, id) for id, tok in ID2TOK.items())
 
     ################################# train data #################################
-    train_examples = processor.get_train_examples(args.data_dir)
+    train_examples = processor.get_train_examples(args.data_dir, args.lite)
     train_features = convert_examples_to_features(
-        train_examples, label_list, args.max_seq_length, tokenizer, TOK2ID)
+        train_examples, label_list, args.max_seq_length, tokenizer, TOK2ID, args.label_method)
     logger.info("***** Running training *****")
     logger.info("  Num examples = %d", len(train_features))
     ################################ save2h5 ########################################
-    # f = h5py.File("data_full_title.h5", "w", libver="latest")
-    # f = h5py.File("data_full_title_POS.h5", "w", libver="latest")
-    # f = h5py.File("data_full_title_end.h5", "w", libver="latest")
-    f = h5py.File("../datasets/data_train.h5", "w", libver="latest")
-    # f = h5py.File("../datasets/lite_last_two.h5", "w", libver="latest")
-    # f = h5py.File("../datasets/data_lite_title.h5", "w", libver="latest")
+    if not args.lite:
+        f = h5py.File("../datasets/train.h5", "w", libver="latest")
+    else:
+        f = h5py.File("../datasets/lite.h5", "w", libver="latest")
     # free memory!!
     gc.collect()
     all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
@@ -546,43 +529,35 @@ def main():
     del all_segment_ids, all_label_ent_ids, all_label_emo_ids
     gc.collect()
 
-
     ################################# val data #################################
-    eval_examples = processor.get_dev_examples(args.data_dir)
+    eval_examples = processor.get_dev_examples(args.data_dir, args.lite)
     eval_features = convert_examples_to_features(
-        eval_examples, label_list, args.max_seq_length, tokenizer, TOK2ID)
+        eval_examples, label_list, args.max_seq_length, tokenizer, TOK2ID, args.label_method)
 
     logger.info("***** Running evaluation *****")
     logger.info("  Num examples = %d", len(eval_features))
     all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
     all_myinput_ids = torch.tensor([f.myinput_ids for f in eval_features], dtype=torch.long)
-    f.create_dataset("dev/input_ids", data=all_input_ids, compression="gzip")
-    f.create_dataset("dev/myinput_ids", data=all_myinput_ids, compression="gzip")
+    f.create_dataset("val/input_ids", data=all_input_ids, compression="gzip")
+    f.create_dataset("val/myinput_ids", data=all_myinput_ids, compression="gzip")
     all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-    f.create_dataset("dev/input_mask", data=all_input_mask, compression="gzip")
+    f.create_dataset("val/input_mask", data=all_input_mask, compression="gzip")
     del all_input_ids, all_input_mask
     gc.collect()
     all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-    f.create_dataset("dev/segment_ids", data=all_segment_ids, compression="gzip")
+    f.create_dataset("val/segment_ids", data=all_segment_ids, compression="gzip")
     all_label_ent_ids = torch.tensor([f.label_ent_ids for f in eval_features], dtype=torch.long)
-    f.create_dataset("dev/label_ent_ids", data=all_label_ent_ids, compression="gzip")
+    f.create_dataset("val/label_ent_ids", data=all_label_ent_ids, compression="gzip")
     all_label_emo_ids = torch.tensor([f.label_emo_ids for f in eval_features], dtype=torch.long)
-    f.create_dataset("dev/label_emo_ids", data=all_label_emo_ids, compression="gzip")
+    f.create_dataset("val/label_emo_ids", data=all_label_emo_ids, compression="gzip")
     del all_segment_ids, all_label_ent_ids, all_label_emo_ids
     gc.collect()
     f.close()
-    ID2TOK = OrderedDict((id,tok) for tok, id in TOK2ID.items())
-    data_dump(ID2TOK, "../datasets/ID2TOK_train.pkl")
+    ID2TOK = OrderedDict((id, tok) for tok, id in TOK2ID.items())
+    data_dump(ID2TOK, "../datasets/ID2TOK.pkl")
 
     print("save to h5 over!")
 
 
-
 if __name__ == "__main__":
     main()
-    '''
-    --data_dir=/home/lzk/llouice/BERT/souhu/BERT-NER-master/full/data_full
-    --parent_dir=/home/lzk/llouice/BERT/souhu/BERT-NER-master/full
-    --do_train
-    --do_eval 
-    '''

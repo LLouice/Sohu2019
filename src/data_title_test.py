@@ -4,7 +4,6 @@ import argparse
 import logging
 import os
 import random
-import pickle
 
 import numpy as np
 import torch
@@ -13,25 +12,12 @@ import h5py
 import gc
 from collections import OrderedDict
 import re
-from utils import covert_mytokens_to_myids
+from utils import covert_mytokens_to_myids, data_dump, load_data
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def data_dump(data, file):
-    with open(file, "wb") as f:
-        pickle.dump(data, f)
-    logger.info("store {} successfully!".format(file))
-
-
-def load_data(path):
-    with open(path, "rb") as f:
-        res = pickle.load(f)
-    logger.info("load data from {} successfully!".format(path))
-    return res
 
 
 class InputExample(object):
@@ -57,21 +43,16 @@ class InputExample(object):
 
 class InputFeatures(object):
     """A single set of features of data."""
+
     def __init__(self, ID, input_ids, myinput_ids, input_mask, segment_ids):
         self.ID = ID
         self.input_ids = input_ids
         self.myinput_ids = myinput_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
-        # self.label_ent_ids = label_ent_ids
-        # self.label_emo_ids = label_emo_ids
 
 
 def readfile(filename):
-    '''
-    read file
-    return format :
-    '''
     logger.info("read file:{}....".format(filename))
     data = []
 
@@ -152,25 +133,14 @@ class DataProcessor(object):
 class NerProcessor(DataProcessor):
     """Processor for the CoNLL-2003 data set."""
 
-    def get_train_examples(self, data_dir):
+    def get_test_examples(self, data_dir, islite):
         """See base class."""
-        return self._create_examples(
-            # self._read_tsv(os.path.join(data_dir, "train.txt")), "train")
-            self._read_tsv(os.path.join(data_dir, "train_full.txt")), "train")
-        # self._read_tsv(os.path.join(data_dir, "train_full.txt")), "train")
-        # self._read_tsv(os.path.join(data_dir, "train_lite.txt")), "train")
-
-    def get_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev_full.txt")), "dev")
-        # self._read_tsv(os.path.join(data_dir, "dev_full.txt")), "dev")
-        # self._read_tsv(os.path.join(data_dir, "dev_lite.txt")), "dev")
-
-    def get_test_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test.txt")), "test")
+        if not islite:
+            return self._create_examples(
+                self._read_tsv(os.path.join(data_dir, "test.txt")), "test")
+        else:
+            return self._create_examples(
+                self._read_tsv(os.path.join(data_dir, "lite_test")), "test")
 
     def get_labels(self):
         return ["O", "B-POS", "I-POS", "B-NEG", "I-NEG", "B-NORM", "I-NORM", "X", "[CLS]", "[SEP]"]
@@ -200,11 +170,9 @@ def _truncate_seq_pair(tokens_a, tokens_b, mytokens_a, mytokens_b, labels_A, lab
         if len(tokens_a) > len(tokens_b):
             tokens_a.pop()
             mytokens_a.pop()
-            # labels_A.pop()
         else:
             tokens_b.pop()
             mytokens_b.pop()
-            # labels_B.pop()
 
 
 def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer, TOK2ID):
@@ -213,7 +181,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
     logger.info("gen features...")
     label_map = {label: i for i, label in enumerate(label_list, 1)}
     label_map["PAD"] = 0
-    label_map_reversed = {v: k for k, v in label_map.items()}
 
     features = []
     logger.info("prepare features.....")
@@ -327,84 +294,23 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         tokens = ["[CLS]"] + tokens_A + ["[SEP]"] + tokens_B + ["[SEP]"]
         mytokens = ["[CLS]"] + mytokens_A + ["[SEP]"] + mytokens_B + ["[SEP]"]
         assert len(tokens) == len(mytokens)
-        # labels = ["[CLS]"] + labels_A + ["[SEP]"] + labels_B + ["[SEP]"]
         segment_ids = [0] * (len(tokens_A) + 2) + [1] * (len(tokens_B) + 1)
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
         myinput_ids = covert_mytokens_to_myids(TOK2ID, mytokens)
         input_mask = [1] * len(input_ids)
-        # label_ids = [label_map[lbl] for lbl in labels]
         # ------------------------------- PAD -----------------------------------
         padding = [0] * (max_seq_length - len(input_ids))
         input_ids += padding
         myinput_ids += padding
         input_mask += padding
         segment_ids += padding
-        # label_ids += padding
-        # -----------------------------------------------------------------------
-        #############################分为两个label_ids###########################
-        # emo label id 还有待实验 B-POS I-POS  or POS POS
-        # PAD O B-POS I-POS B-NEG I-NEG B-NORM I-NORM X [CLS] [SEP]
-        #  0  1   2    3     4     5      6     7     8   9    10
-        # PAD O   B    I     X   [CLS]  [SEP]
-
-        # O   O  POS  POS   NEG   NEG    NORM   NORM  O   O    O
-        # 0       1          2            3
-
-        # 类最少的模式
-        # O   B    I
-        # 0   1    2     3
-        # 0  POS NEG  NORM
-
-        # label_emo_ids = label_ids
-        # 这里可能有两种emo标法 只标 B 或者 BI都标, 这里使用后者,即上面所示
-        '''
-        L = np.array(label_ids)
-        L[L == 10] = 0
-        L[L == 9] = 0
-        L[L == 8] = 0
-        L[L == 1] = 0
-
-        L[L == 2] = 1
-        L[L == 3] = 1
-        L[L == 4] = 2
-        L[L == 5] = 2
-        L[L == 6] = 3
-        L[L == 7] = 3
-        label_emo_ids = L.tolist()
-        # ------------------
-        L = np.array(label_ids)
-        # 带 PAD X [CLS] 标法
-        # L[L==4]=2
-        # L[L==6]=2
-        # L[L==5]=3
-        # L[L==7]=3
-        # L[L==8]=4
-        # L[L==9]=5
-        # L[L==10]=
-        
-        #----
-        L[L == 1] = 0
-        L[L == 2] = 1
-        L[L == 4] = 1
-        L[L == 6] = 1
-        L[L == 3] = 2
-        L[L == 5] = 2
-        L[L == 7] = 2
-        L[L == 8] = 0
-        L[L == 9] = 0
-        L[L == 10] = 0
-        label_ent_ids = L.tolist()
-        '''
 
         #######################################################################
-
         assert len(input_ids) == len(myinput_ids)
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
-        # assert len(label_ent_ids) == max_seq_length
-        # assert len(label_emo_ids) == max_seq_length
 
         if ex_index < 5:
             logger.info("*** Example ***")
@@ -415,16 +321,12 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             logger.info(
                 "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            # logger.info(
-            #     "label: %s" % " ".join([label_map_reversed[x] for x in label_ids]))
         features.append(
             InputFeatures(ID=example.guid,
                           input_ids=input_ids,
                           myinput_ids=myinput_ids,
                           input_mask=input_mask,
                           segment_ids=segment_ids))
-        # label_ent_ids=label_ent_ids,
-        # label_emo_ids=label_emo_ids))
         count += 1
         if count % 10000 == 0:
             print("gen example {} feature".format(count))
@@ -436,29 +338,19 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
 def main():
     parser = argparse.ArgumentParser()
-    ## Required parameters
     parser.add_argument("--data_dir",
-                        default=None,
+                        default="../datasets",
                         type=str,
-                        required=True,
+                        required=False,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    parser.add_argument("--bert_model", default=None, type=str, required=False,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                             "bert-base-multilingual-cased, bert-base-chinese.")
     parser.add_argument("--bert_token_model",
-                        default="/home/lzk/llouice/.pytorch_pretrained_bert/8a0c070123c1f794c42a29c6904beb7c1b8715741e235bee04aca2c7636fc83f.9b42061518a39ca00b8b52059fd2bede8daa613f8a8671500e518a8c29de8c00",
+                        default="bert_pretrained/bert_token_model",
                         type=str, required=False)
     parser.add_argument("--task_name",
                         default="ner",
                         type=str,
                         required=False,
                         help="The name of the task to train.")
-    parser.add_argument("--parent_dir",
-                        default=".",
-                        type=str,
-                        required=True,
-                        help="The output directory where the model predictions and checkpoints will be written.")
 
     ## Other parameters
     parser.add_argument("--cache_dir",
@@ -478,9 +370,11 @@ def main():
                         type=int,
                         default=42,
                         help="random seed for initialization")
+    parser.add_argument("--lite",
+                        action='store_true',
+                        help="is lite")
     args = parser.parse_args()
     logger.info("data_dir: {}".format(args.data_dir))
-    logger.info("parent_dir: {}".format(args.parent_dir))
 
     processors = {"ner": NerProcessor}
 
@@ -497,12 +391,12 @@ def main():
     label_list = processor.get_labels()
     tokenizer = BertTokenizer.from_pretrained(args.bert_token_model, do_lower_case=args.do_lower_case)
 
-    ID2TOK = tokenizer.ids_to_tokens
+    # ID2TOK = tokenizer.ids_to_tokens
+    ID2TOK = load_data("../datasets/ID2TOK.pkl")
     TOK2ID = OrderedDict((tok, id) for id, tok in ID2TOK.items())
 
-
     logger.info("in do_test now")
-    test_examples = processor.get_test_examples(args.data_dir)
+    test_examples = processor.get_test_examples(args.data_dir, args.lite)
     test_features = convert_examples_to_features(
         test_examples, label_list, args.max_seq_length, tokenizer, TOK2ID)
     logger.info("***** Running on Test *****")
@@ -513,7 +407,10 @@ def main():
     all_myinput_ids = torch.tensor([f.myinput_ids for f in test_features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in test_features], dtype=torch.long)
 
-    f = h5py.File("../datasets/data_test.h5", "w", libver="latest")
+    if not args.lite:
+        f = h5py.File("../datasets/train.h5", "r+", libver="latest")
+    else:
+        f = h5py.File("../datasets/lite.h5", "r+", libver="latest")
     f.create_dataset("test/IDs", data=all_IDs, compression="gzip")
     f.create_dataset("test/input_ids", data=all_input_ids, compression="gzip")
     f.create_dataset("test/myinput_ids", data=all_myinput_ids, compression="gzip")
@@ -525,15 +422,9 @@ def main():
     f.close()
     # data_dump(TOK2ID, "../datasets/TOK2ID_test.pkl")
     ID2TOK = OrderedDict((id, tok) for tok, id in TOK2ID.items())
-    data_dump(ID2TOK, "../datasets/ID2TOK_test.pkl")
+    data_dump(ID2TOK, "../datasets/ID2TOK.pkl")
     print("save to h5 over!")
-
 
 
 if __name__ == "__main__":
     main()
-
-    '''
-    --data_dir=/home/lzk/llouice/BERT/souhu/BERT-NER-master/full/data_full
-    --parent_dir=/home/lzk/llouice/BERT/souhu/BERT-NER-master/full
-    '''
