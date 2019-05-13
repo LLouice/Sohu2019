@@ -10,11 +10,11 @@ file = "../datasets/news.pkl"
 data = load_data(file)
 print(len(data))
 
-# 先分成 full lite 两大部分
-full, lite = train_test_split(data, test_size=0.1)
+# 分出lite
+_, lite = train_test_split(data, test_size=0.1)
 
 # 再各自分成 trn 和 val
-full_trn, full_val = train_test_split(full, test_size=0.2)
+full_trn, full_val = train_test_split(data, test_size=0.2)
 lite_trn, lite_val = train_test_split(lite, test_size=0.2)
 
 
