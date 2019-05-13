@@ -15,16 +15,15 @@ from ignite.contrib.handlers.tqdm_logger import ProgressBar
 #                                                      LRScheduler)
 # from torch.optim.lr_scheduler import ExponentialLR
 
-from ignite.metrics import  RunningAverage
+from ignite.metrics import RunningAverage
 from ignite.contrib.handlers.tensorboard_logger import *
 from metric import FScore
-from torch.utils.data import  DataLoader, RandomSampler, SequentialSampler, TensorDataset
-from models import  NetX3
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from models import NetX3
 from loss import FocalLoss
 
+
 # torch.random.manual_seed(42)
-
-
 
 
 def get_data_loader():
@@ -51,7 +50,7 @@ def get_data_loader():
     label_ent_ids = torch.from_numpy(f["val/label_ent_ids"][()])
     label_emo_ids = torch.from_numpy(f["val/label_emo_ids"][()])
     assert input_ids.size() == segment_ids.size() == label_ent_ids.size() == label_emo_ids.size() == myinput_ids.size()
-    val_dataset = TensorDataset(input_ids,myinput_ids ,input_mask, segment_ids, label_ent_ids, label_emo_ids)
+    val_dataset = TensorDataset(input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids)
     print("val dataset num: ", input_ids.size(0))
     f.close()
     print("read h5 over!")
@@ -70,6 +69,7 @@ def get_data_loader():
     #                             pin_memory=True)
     print("get date loader over!")
     return trn_dataloader, val_dataloader, len(trn_dataset)
+
 
 def train():
     ################################ Model Config ###################################
@@ -125,7 +125,6 @@ def train():
         criterion = torch.nn.CrossEntropyLoss()
     else:
         criterion = FocalLoss(args.gamma)
-
 
     def step(engine, batch):
         model.train()
@@ -198,17 +197,15 @@ def train():
     cpe5 = CustomPeriodicEvent(n_epochs=5)
     cpe5.attach(trainer)
 
-
-
     ############################## My F1 ###################################
-    F1 = FScore(output_transform=lambda x: [x[1], x[2],x[3], x[4], x[-1]])
+    F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]])
     F1.attach(val_evaluator, "F1")
-
 
     #####################################  progress bar #########################
     RunningAverage(output_transform=lambda x: x[0]).attach(trainer, 'batch_loss')
     pbar = ProgressBar(persist=True)
     pbar.attach(trainer, metric_names=["batch_loss"])
+
     #####################################  Evaluate #########################
 
     @trainer.on(Events.EPOCH_COMPLETED)
@@ -234,8 +231,6 @@ def train():
 
         pbar.n = pbar.last_print_n = 0
 
-
-
     @val_evaluator.on(Events.EPOCH_COMPLETED)
     def reduct_step(engine):
         engine.state.metrics["total_loss"] /= engine.state.iteration
@@ -255,8 +250,12 @@ def train():
         # loss = engine.state.metrics["loss"]
         return f1
 
-    checkpoint_handler = ModelCheckpoint(os.path.join(args.checkpoint_model_dir, args.hyper_cfg),
-                                         'checkpoint',
+    if not args.lite:
+        ckp_dir = os.path.join(args.checkpoint_model_dir, "full", args.hyper_cfg)
+    else:
+        ckp_dir = os.path.join(args.checkpoint_model_dir, "lite", args.hyper_cfg)
+    checkpoint_handler = ModelCheckpoint(ckp_dir,
+                                         'ckp',
                                          # save_interval=args.checkpoint_interval,
                                          score_function=best_f1,
                                          score_name="F1",
@@ -276,10 +275,12 @@ def train():
 
     ######################################################################
 
-
     #################################### tb logger ##################################
     # 在已经在对应基础上计算了 metric 的值 (compute_metric) 后 取值 log
-    tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, args.hyper_cfg))
+    if not args.lite:
+        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "full", args.hyper_cfg))
+    else:
+        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "lite", args.hyper_cfg))
 
     tb_logger.attach(trainer,
                      log_handler=OutputHandler(tag="training", output_transform=lambda x: {'batchloss': x[0]}),
