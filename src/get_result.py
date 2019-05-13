@@ -85,7 +85,7 @@ def main():
     input_mask = f_test.get("test/input_mask")[()]
     segement_ids = f_test.get("test/segment_ids")[()]
     unique_IDs = np.unique(IDs)
-    assert np.max(unique_IDs) == len(IDs) - 1
+    assert np.max(unique_IDs) == 79999
     # ------------------------------------------------------------------------------
     # -------------------------------- pred data -----------------------------------
     pred_ent = f_pred.get("ent")[()]
@@ -98,7 +98,7 @@ def main():
     idx1 = 0
     time0 = time.time()
     time1 = time.time()
-    for id in range(40000):
+    for id in range(80000):
         num = np.sum(IDs == id)
         idx2 = idx1 + num
         # [bs, 128, 3]
