@@ -441,7 +441,7 @@ def main():
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
 
     parser.add_argument("--bert_token_model",
-                        default="bert_pretrained/bert_token_model",
+                        default="../bert_pretrained/bert_token_model",
                         type=str, required=False)
     parser.add_argument("--task_name",
                         default="ner",
