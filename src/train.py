@@ -141,7 +141,13 @@ def train():
 
         loss_emo = criterion(act_logits_emo, act_y_emo)
         # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
-        loss = alpha * loss_ent + loss_emo
+        if not args.multi:
+            loss = alpha * loss_ent + loss_emo
+        else:
+            alphas = [1e-5, 1e-2, 1e-1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            print("alphas: "," ".join(map(str,alpha)))
+            loss = loss_ent + alphas[engine.state.epoch-1]*loss_emo
+
         if engine.state.metrics.get("total_loss") is None:
             engine.state.metrics["total_loss"] = 0
             engine.state.metrics["ent_loss"] = 0
@@ -390,6 +396,9 @@ if __name__ == '__main__':
     parser.add_argument("--lite",
                         action="store_true",
                         help="")
+    parser.add_argument("--multi",
+                        action="store_true",
+                        help="multi alpha or not")
 
     args = parser.parse_args()
 
