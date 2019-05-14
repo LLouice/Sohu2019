@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eux
-export CUDA_VISIBLE_DEVICE=0,1
+export CUDA_VISIBLE_DEVICES=0,1
 
 bs=48
 val_bs=48

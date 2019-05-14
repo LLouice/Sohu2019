@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eux
-export CUDA_VISIBLE_DEVICE=0,1
+export CUDA_VISIBLE_DEVICES=0,1
 test_batch_size=500
 best_model="best_model.pt.bak"
 pred="pred_new.h5"

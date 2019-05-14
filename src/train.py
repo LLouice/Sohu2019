@@ -54,6 +54,7 @@ def get_data_loader():
     print("val dataset num: ", input_ids.size(0))
     f.close()
     print("read h5 over!")
+    print(f"bs: {args.batch_size}\nval_bs: {args.val_batch_size}")
     # ------------------------------- 可以从 H5Dataset2 继承优化 -------------------------
     # trn_dataset = H5Dataset3("../datasets/data_full_title.h5", "train")
     # val_dataset = H5Dataset3("../datasets/data_full_title.h5", "val")
