@@ -518,6 +518,110 @@ class NetX3(BertPreTrainedModel):
             # 可以加ent_mask 也可以不加
             return logits_ent, logits_emo
 
+
+class NetX3_fz(BertPreTrainedModel):
+    '''
+    NeX3 的 freeze 版本
+    '''
+
+    def __init__(self, config, num_labels_ent, num_labels_emo, dp):
+        super(NetX3_fz, self).__init__(config)
+        self.num_labels_ent = num_labels_ent
+        self.num_labels_emo = num_labels_emo
+        self.bert = BertModel(config)
+        self.dp = dp
+        # freeze bert!
+        # for param in self.bert.parameters():
+        #     param.requires_grad = False
+
+        # only unfreeze 10 11
+        # for idx, (n,m) in enumerate(self.bert.named_modules()):
+        #     if idx < 179:
+        #         for p in m.parameters():
+        #             p.requires_grad = False
+        #             print(idx, n)
+        #     else:
+        #         print("not freeze: ", idx, n)
+        # print("model freeze over!")
+
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier_ent = nn.Linear(config.hidden_size * 2, num_labels_ent)
+        self.classifier_emo = nn.Linear(config.hidden_size * 2, num_labels_emo)
+        self.apply(self.init_bert_weights)
+
+    def freeze(self):
+        for idx, (n, m) in enumerate(self.bert.named_modules()):
+            if idx < 179:
+                for p in m.parameters():
+                    p.requires_grad = False
+                    print(idx, n)
+            else:
+                print("not freeze: ", idx, n)
+        print("model freeze over!")
+
+    def unfreeze(self):
+        for idx, (n, m) in enumerate(self.bert.named_modules()):
+            for p in m.parameters():
+                p.requires_grad = True
+        print("unfreeze over")
+
+    def forward(self, input_ids, myinput_ids=None, token_type_ids=None, attention_mask=None, labels_ent=None,
+                labels_emo=None):
+        # _ is [CLS] 可以试试拼接在序列每个字上
+        sequence_output, CLS = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        # bs, 128 ,768   bs,768
+        # use repeat
+        CLS = CLS.repeat(1, sequence_output.size(1)).view(sequence_output.size())
+        sequence_output = torch.cat([sequence_output, CLS], dim=-1)
+        # sequence_output = self.dropout(sequence_output)
+        sequence_output = nn.Dropout(self.dp)(sequence_output)
+        logits_ent = self.classifier_ent(sequence_output)
+        logits_emo = self.classifier_emo(sequence_output)
+
+        if labels_ent is not None and labels_emo is not None:
+            # loss_fct = nn.CrossEntropyLoss()
+            # Only keep active parts of the loss, use 10 class !!!
+            if attention_mask is not None:
+                active_mask = attention_mask.view(-1) == 1
+                active_seg = token_type_ids.view(-1)[active_mask]
+                active_seg = active_seg == 0
+
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)[active_mask][active_seg]  # [L, C_ent]
+                active_labels_ent = labels_ent.view(-1)[active_mask][active_seg]  # [L, ]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)[active_mask][active_seg]  # [L, C_emo]
+                active_labels_emo = labels_emo.view(-1)[active_mask][active_seg]  # [L, ]
+                # 在实体基础上再做情感 通过 argmax 的 mask 实现    可能让 ent 预训练一会儿再做情感可能会更好....
+                # 目前的方法可以有:
+                #     1. 只对  1,即  B 做情感  [Y]  注意这里的情感只有 POS NEG NORM ([错误划掉]没有 O 要不然取出实体可能不能得到其情感(预测为O))
+                #     2. 122 做情感 可投票
+                #     3. 122 222 111 都做情感
+                # 似乎把metric的逻辑和训练逻辑弄在一起了
+                ent_mask = torch.argmax(torch.softmax(active_logits_ent, dim=-1), dim=-1)  # [L,]
+                ent_mask = ent_mask == 1  # [L', ]
+                mask_logits_emo = active_logits_emo[ent_mask]  # [L', ]
+                mask_labels_emo = active_labels_emo[ent_mask]
+                assert mask_logits_emo.size(0) == mask_labels_emo.size(0)
+                # active_input_ids = input_ids.view(-1)[active_loss] #[L, ]
+                active_myinput_ids = myinput_ids.view(-1)[active_mask][active_seg]  # [L, ]
+                # loss = loss_fct(active_logits, active_labels)
+            else:
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)  # [L, C_ent]
+                ent_mask = torch.argmax(torch.softmax(active_logits_ent, dim=-1), dim=-1)  # [L,]
+                ent_mask = ent_mask == 2  # [L', ]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)  # [ent_mask] #[L', ]
+                mask_logits_emo = active_logits_emo[ent_mask]
+                active_labels_emo = labels_emo.view(-1)
+                mask_labels_emo = active_logits_emo[ent_mask]
+                active_labels_ent = labels_ent.view(-1)
+                # active_input_ids = input_ids.view(-1)
+                active_myinput_ids = myinput_ids.view(-1)
+            # return active_logits, active_labels,logits, labels
+            return active_logits_ent, active_labels_ent, active_logits_emo, active_labels_emo, mask_logits_emo, mask_labels_emo, active_myinput_ids
+        else:
+            # 可以加ent_mask 也可以不加
+            return logits_ent, logits_emo
+
+
 class NetX4(BertPreTrainedModel):
     '''
     基于NetX3 fc 为两层 或者可以 768*2 -> 768 -> 3/4
@@ -608,6 +712,7 @@ class NetX4(BertPreTrainedModel):
             # 可以加ent_mask 也可以不加
             return logits_ent, logits_emo
 
+
 class NetX5(BertPreTrainedModel):
     '''
     基于NetX3 明确使用 xvaier_normal_ 初始化 添加 BN 代替 dropout
@@ -634,8 +739,8 @@ class NetX5(BertPreTrainedModel):
         # print("model freeze over!")
 
         # self.dropout = nn.Dropout(self.dp)
-        self.bn = nn.BatchNorm1d(config.hidden_size*2, eps=2e-1)
-        self.classifier_ent= nn.Linear(config.hidden_size * 2, num_labels_ent)
+        self.bn = nn.BatchNorm1d(config.hidden_size * 2, eps=2e-1)
+        self.classifier_ent = nn.Linear(config.hidden_size * 2, num_labels_ent)
         # weight init
         nn.init.xavier_uniform_(self.classifier_ent.weight)
         self.classifier_emo = nn.Linear(config.hidden_size * 2, num_labels_emo)
@@ -696,6 +801,8 @@ class NetX5(BertPreTrainedModel):
         else:
             # 可以加ent_mask 也可以不加
             return logits_ent, logits_emo
+
+
 class NetXLast(BertPreTrainedModel):
     '''
     只对A句进行loss计算
