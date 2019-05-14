@@ -10,8 +10,8 @@ file = "../datasets/news.pkl"
 data = load_data(file)
 print(len(data))
 
-# 分出lite
-_, lite = train_test_split(data, test_size=0.1)
+# 分出lite (40000+1305) * 0.04 = 1652 -> 1322:330
+_, lite = train_test_split(data, test_size=0.04)
 
 # 再各自分成 trn 和 val
 full_trn, full_val = train_test_split(data, test_size=0.2)
