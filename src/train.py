@@ -360,9 +360,9 @@ if __name__ == '__main__':
                         help='SGD momentum (default: 0.5)')
     parser.add_argument('--log_interval', type=int, default=10,
                         help='how many batches to wait before logging training status')
-    parser.add_argument("--log_dir", type=str, default="tbs",
+    parser.add_argument("--log_dir", type=str, default="../tbs",
                         help="log directory for Tensorboard log output")
-    parser.add_argument("--checkpoint_model_dir", type=str, default='ckps',
+    parser.add_argument("--checkpoint_model_dir", type=str, default='../ckps',
                         help="path to folder where checkpoints of trained models will be saved")
     parser.add_argument("--ckp", type=str, default='None',
                         help="ckp file")

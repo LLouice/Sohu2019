@@ -14,7 +14,7 @@ wd=0.01
 cd ..
 
 run_lite(){
-    python -u trian.py \
+    python -u train.py \
         --lr=${lr} \
         --batch_size=${bs} \
         --val_batch_size=${val_bs} \
@@ -23,12 +23,12 @@ run_lite(){
         --warmup_proportion=${warm} \
         --dp=${dp} \
         --wd=${wd} \
-        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wd_${wd}_lite \
+        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wd_${wd} \
         --lite \
-        &>> ../../logs/lite.log
+        &>> ../logs/lite.log
 }
 run_full(){
-    python -u trian.py \
+    python -u train.py \
         --lr=${lr} \
         --batch_size=${bs} \
         --val_batch_size=${val_bs} \
@@ -37,8 +37,8 @@ run_full(){
         --warmup_proportion=${warm} \
         --dp=${dp} \
         --wd=${wd} \
-        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wc_${wd}_lite \
-        &>> ../../logs/full.log
+        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wc_${wd} \
+        &>> ../logs/full.log
 }
 
 run_lite
