@@ -37,7 +37,7 @@ run_full(){
         --warmup_proportion=${warm} \
         --dp=${dp} \
         --wd=${wd} \
-        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wc_${wd} \
+        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wd_${wd} \
         &>> ../logs/full.log
 }
 
