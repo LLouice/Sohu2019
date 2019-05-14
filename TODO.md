@@ -13,9 +13,11 @@
 - [ ] lite 调参
 
 ## ent loss 和 emo loss 的处理
-- [ ] emo loss 权重组
+- [x] emo loss 权重组
     > 先给 emo 小权重 让 ent loss 先收敛 再加大 emo loss 权重 joint 一起收敛 
 
 # inference
-- [ ] 初赛模型 -> result.txt
+- [x] 初赛模型 -> result.txt
 
+# 模型
+- [ ] freeze and unfreeze
