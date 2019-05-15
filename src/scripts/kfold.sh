@@ -6,7 +6,7 @@ cd ../kflod
 
 python -u train.py \
         --batch_size=128 \
-        --val_batch_size=128
+        --val_batch_size=128 \
         --lite
 
 

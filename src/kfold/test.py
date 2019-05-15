@@ -1,4 +1,6 @@
 import os
+
+os.chdir("../.")
 import h5py
 from argparse import ArgumentParser
 import torch
@@ -6,7 +8,7 @@ from ignite.engine import Engine, Events
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from torch.utils.data import DataLoader, SequentialSampler, TensorDataset
 from models import NetX3
-from utils import  load_data
+from utils import load_data
 
 
 def get_all_data():
@@ -43,10 +45,11 @@ def get_all_data():
 
     return dataset
 
+
 def get_val_loader(dataset, cv):
     print(f"get dataloader {cv}")
     # 从 index 中取出 trn_dataset val_dataset
-    index_file = "5cv_indexs_{}".format(cv)
+    index_file = "kfold/5cv_indexs_{}".format(cv)
     if os.path.exists(index_file):
         _, val_index = load_data(index_file)
         val_dataset = [dataset[idx] for idx in val_index]
@@ -59,7 +62,8 @@ def get_val_loader(dataset, cv):
     # val_dataloader = DataLoader(val_dataset, sampler=SequentialSampler(val_dataset), batch_size=args.val_batch_size,
     #                             pin_memory=True)
     print("get date loader over!")
-    return  val_dataloader, len(val_dataset)
+    return val_dataloader, len(val_dataset)
+
 
 def get_test_dataloader():
     print("get test dataloader...........")
@@ -79,7 +83,7 @@ def get_test_dataloader():
     return test_dataloader, len(test_dataset)
 
 
-def run(cv, test_dataloader):
+def run(test_dataloader, cv):
     ################################ Model Config ###################################
     num_labels_emo = 4
     num_labels_ent = 3
@@ -98,9 +102,8 @@ def run(cv, test_dataloader):
     if os.path.exists(model_file):
         model.load_state_dict(torch.load(model_file))
         print("load checkpoint: {} successfully!".format(model_file))
+
     # -----------------------------------------------------------------------------
-
-
 
     def test(engine, batch):
         model.eval()
@@ -117,43 +120,54 @@ def run(cv, test_dataloader):
     pbar_test.attach(tester)
 
     # ++++++++++++++++++++++++++++++++++ Test +++++++++++++++++++++++++++++++++
-    f = h5py.File(f"../preds/pred_5cv.h5", "r+")
+    if cv ==1:
+        f = h5py.File(f"../preds/pred_5cv.h5", "w")
+    else:
+        f = h5py.File(f"../preds/pred_5cv.h5", "r+")
     ent_raw = f.create_dataset(f"cv{cv}/ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
     emo_raw = f.create_dataset(f"cv{cv}/emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
+
     # ent = f.create_dataset(f"cv{cv}/ent", shape=(0, 128), maxshape=(None, 128), compression="gzip")
     # emo = f.create_dataset(f"cv{cv}/emo", shape=(0, 128), maxshape=(None, 128), compression="gzip")
     # if cv == 1:
-
-
-
 
     @tester.on(Events.ITERATION_COMPLETED)
     def get_test_pred(engine):
         # cur_iter = engine.state.iteration
         batch_size = engine.state.batch[0].size(0)
         pred_ent_raw, pred_emo_raw = engine.state.output
-        pred_ent = torch.argmax(torch.softmax(pred_ent_raw, dim=-1), dim=-1)  # [-1, 128]
-        pred_emo = torch.argmax(torch.softmax(pred_emo_raw, dim=-1), dim=-1)  # [-1, 128]
-        old_size = ent_raw.shape[0]
-        # ent.resize(old_size + batch_size, axis=0)
-        # emo.resize(old_size + batch_size, axis=0)
-        # ent[old_size: old_size + batch_size] = pred_ent.cpu()
-        # emo[old_size: old_size + batch_size] = pred_emo.cpu()
-        ent_raw.resize(old_size + batch_size, axis=0)
-        emo_raw.resize(old_size + batch_size, axis=0)
-        ent_raw[old_size: old_size + batch_size] = pred_ent_raw.cpu()
-        emo_raw[old_size: old_size + batch_size] = pred_emo_raw.cpu()
-        # if cv == 1:
 
+        # pred_ent = torch.argmax(torch.softmax(pred_ent_raw, dim=-1), dim=-1)  # [-1, 128]
+        def add_io():
+            # pred_emo = torch.argmax(torch.softmax(pred_emo_raw, dim=-1), dim=-1)  # [-1, 128]
+            old_size = ent_raw.shape[0]
+            # ent.resize(old_size + batch_size, axis=0)
+            # emo.resize(old_size + batch_size, axis=0)
+            # ent[old_size: old_size + batch_size] = pred_ent.cpu()
+            # emo[old_size: old_size + batch_size] = pred_emo.cpu()
+            ent_raw.resize(old_size + batch_size, axis=0)
+            emo_raw.resize(old_size + batch_size, axis=0)
+            ent_raw[old_size: old_size + batch_size] = pred_ent_raw.cpu()
+            emo_raw[old_size: old_size + batch_size] = pred_emo_raw.cpu()
+            # if cv == 1:
 
+        def add_mem():
+            if engine.state.metrics.get("preds_ent") is None:
+                engine.state.metrics["preds_ent"] = []
+                engine.state.metrics["preds_emo"] = []
+            else:
+                engine.state.metrics["preds_ent"].append(pred_ent_raw.cpu())
+                engine.state.metrics["preds_emo"].append(pred_emo_raw.cpu())
 
-    pbar_test = ProgressBar(persist=True)
-    pbar_test.attach(tester)
+        add_mem()
 
     @tester.on(Events.EPOCH_COMPLETED)
-    def close_h5(engine):
-        print("test over")
+    def save_and_close(engine):
+        if engine.state.get("preds_ent") is None:
+            ent_raw[:] = torch.cat(engine.state.metrics["preds_ent"], dim=0)
+            emo_raw[:] = torch.cat(engine.state.metrics["preds_emo"], dim=0)
         f.close()
+        print("test over")
 
     tester.run(test_dataloader)
 
@@ -169,7 +183,7 @@ if __name__ == '__main__':
                         help='input batch size for test (default: 1000)')
     parser.add_argument("--best_model",
                         default="best_model.pt",
-                        type=str, required=True)
+                        type=str, required=False)
     parser.add_argument("--pred",
                         default="pred_new.h5",
                         type=str, required=False)

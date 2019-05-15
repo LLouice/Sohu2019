@@ -1,4 +1,5 @@
 import os
+os.chdir("../.")
 import h5py
 from argparse import ArgumentParser
 import torch
@@ -66,9 +67,9 @@ def get_data_loader(dataset, cv):
     print(f"get dataloader {cv}")
     # 从 index 中取出 trn_dataset val_dataset
     if not args.lite:
-        index_file = "5cv_indexs_{}".format(cv)
+        index_file = "kfold/5cv_indexs_{}".format(cv)
     else:
-        index_file = "5cv_indexs_{}_lite".format(cv)
+        index_file = "kfold/5cv_indexs_{}_lite".format(cv)
 
     if os.path.exists(index_file):
         trn_index, val_index = load_data(index_file)
@@ -269,10 +270,10 @@ def train(dataset, cv):
                 engine.state.metrics["ent_loss"],
                 engine.state.metrics["emo_loss"]))
         # Save a trained model and the associated configuration
-        model_to_save = model.module if hasattr(model,
-                                                'module') else model  # Only save the model it-self
+        # model_to_save = model.module if hasattr(model,
+        #                                         'module') else model  # Only save the model it-self
         output_model_file = f"../ckps/cv/cv{cv}.pth"
-        torch.save(model_to_save.state_dict(), output_model_file)
+        torch.save(model.state_dict(), output_model_file)
         print(f"save {output_model_file} successfully!")
 
     ######################################################################
@@ -304,8 +305,6 @@ def train(dataset, cv):
                                    to_save={'model_title': model})
     '''
 
-
-
     ######################################################################
 
     ############################## earlystopping ###################################
@@ -319,7 +318,7 @@ def train(dataset, cv):
     if not args.lite:
         tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "full", "cv", str(cv), args.hyper_cfg))
     else:
-        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "lite","cv",  str(cv), args.hyper_cfg))
+        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "lite", "cv", str(cv), args.hyper_cfg))
 
     tb_logger.attach(trainer,
                      log_handler=OutputHandler(tag="training", output_transform=lambda x: {'batchloss': x[0]}),

@@ -5,9 +5,11 @@
 # @File    : test_avg.py
 # @Software: PyCharm
 
+import os
 import h5py
 import torch
 
+os.chdir("../.")
 if __name__ == '__main__':
     fresult = h5py.File("../preds/pred_avg.h5", "w")
     ent_raw = fresult.create_dataset("ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
