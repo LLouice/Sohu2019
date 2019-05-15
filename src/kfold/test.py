@@ -120,7 +120,7 @@ def run(test_dataloader, cv):
     pbar_test.attach(tester)
 
     # ++++++++++++++++++++++++++++++++++ Test +++++++++++++++++++++++++++++++++
-    if cv ==1:
+    if cv == 1:
         f = h5py.File(f"../preds/pred_5cv.h5", "w")
     else:
         f = h5py.File(f"../preds/pred_5cv.h5", "r+")
@@ -165,12 +165,12 @@ def run(test_dataloader, cv):
     def save_and_close(engine):
         if engine.state.metrics.get("preds_ent") is not None:
             preds_ent = torch.cat(engine.state.metrics["preds_ent"], dim=0)
-            perd_emo = torch.cat(engine.state.metrics["preds_emo"], dim=0)
+            preds_emo = torch.cat(engine.state.metrics["preds_emo"], dim=0)
             assert preds_ent.size(0) == preds_emo.size(0)
             ent_raw.resize(preds_ent.size(0), axis=0)
             emo_raw.resize(preds_emo.size(0), axis=0)
-            ent_raw[...] = perd_ent
-            emo_raw[...] = pred_emo
+            ent_raw[...] = preds_ent
+            emo_raw[...] = preds_emo
             print("pred size: ", ent_raw.shape)
         f.close()
         print("test over")
