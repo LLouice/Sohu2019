@@ -91,13 +91,17 @@ def run():
                 ent_raw[old_size: old_size + batch_size] = pred_ent_raw.cpu()
                 emo_raw[old_size: old_size + batch_size] = pred_emo_raw.cpu()
 
-        def add_men():
+        def add_mem():
             if engine.state.metrics.get("preds_ent") is None:
                 engine.state.metrics["preds_ent"] = []
                 engine.state.metrics["preds_emo"] = []
+                engine.state.metrics["preds_ent"].append(pred_ent.cpu())
+                engine.state.metrics["preds_emo"].append(pred_emo.cpu())
                 if args.raw:
                     engine.state.metrics["preds_ent_raw"] = []
                     engine.state.metrics["preds_emo_raw"] = []
+                    engine.state.metrics["preds_ent_raw"].append(pred_ent_raw.cpu())
+                    engine.state.metrics["preds_emo_raw"].append(pred_emo_raw.cpu())
 
             else:
                 engine.state.metrics["preds_ent"].append(pred_ent.cpu())
@@ -106,7 +110,7 @@ def run():
                     engine.state.metrics["preds_ent_raw"].append(pred_ent_raw.cpu())
                     engine.state.metrics["preds_emo_raw"].append(pred_emo_raw.cpu())
 
-        add_men()
+        add_mem()
 
     pbar_test = ProgressBar(persist=True)
     pbar_test.attach(tester)

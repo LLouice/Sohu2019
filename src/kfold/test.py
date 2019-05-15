@@ -155,6 +155,8 @@ def run(test_dataloader, cv):
             if engine.state.metrics.get("preds_ent") is None:
                 engine.state.metrics["preds_ent"] = []
                 engine.state.metrics["preds_emo"] = []
+                engine.state.metrics["preds_ent"].append(pred_ent_raw.cpu())
+                engine.state.metrics["preds_emo"].append(pred_emo_raw.cpu())
             else:
                 engine.state.metrics["preds_ent"].append(pred_ent_raw.cpu())
                 engine.state.metrics["preds_emo"].append(pred_emo_raw.cpu())
