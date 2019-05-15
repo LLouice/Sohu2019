@@ -163,9 +163,15 @@ def run(test_dataloader, cv):
 
     @tester.on(Events.EPOCH_COMPLETED)
     def save_and_close(engine):
-        if engine.state.metrics.get("preds_ent") is None:
-            ent_raw[:] = torch.cat(engine.state.metrics["preds_ent"], dim=0)
-            emo_raw[:] = torch.cat(engine.state.metrics["preds_emo"], dim=0)
+        if engine.state.metrics.get("preds_ent") is not None:
+            preds_ent = torch.cat(engine.state.metrics["preds_ent"], dim=0)
+            perd_emo = torch.cat(engine.state.metrics["preds_emo"], dim=0)
+            assert preds_ent.size(0) == preds_emo.size(0)
+            ent_raw.resize(preds_ent.size(0), axis=0)
+            emo_raw.resize(preds_emo.size(0), axis=0)
+            ent_raw[...] = perd_ent
+            emo_raw[...] = pred_emo
+            print("pred size: ", ent_raw.shape)
         f.close()
         print("test over")
 
