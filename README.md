@@ -18,8 +18,8 @@
    >>> lite.h5 包括2个数据集 trina val
    
 ## 数据集生成流程
-data_raw_trnval news.pkl -> lite_trn.txt lite_val.txt train.txt val.txt
-data_raw_test   news_test.pkl -> test.txt news_mapl.pkl
-data_title_trnval -> lite.h5  full.h5 ID2TOK.pkl
-data_title_test   -> update full.h5 ID2TOK.pkl
++ data_raw_trnval news.pkl -> lite_trn.txt lite_val.txt train.txt val.txt  
++ data_raw_test   news_test.pkl -> test.txt news_mapl.pkl  
++ data_title_trnval -> lite.h5  full.h5 ID2TOK.pkl  
++ data_title_test   -> update full.h5 ID2TOK.pkl
 

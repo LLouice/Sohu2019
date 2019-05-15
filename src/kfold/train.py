@@ -1,4 +1,5 @@
 import os
+os.chdir("../.")
 import h5py
 from argparse import ArgumentParser
 import torch
@@ -21,44 +22,62 @@ from metric import FScore
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from models import NetX3
 from loss import FocalLoss
+from utils import load_data
 
 
 # torch.random.manual_seed(42)
 
 
-def get_data_loader():
-    print("get data loader...........")
+def get_all_data():
+    print("get all data...........")
     # -------------------------------read from h5-------------------------
     if not args.lite:
         f = h5py.File("../datasets/full.h5")
     else:
         f = h5py.File("../datasets/lite.h5")
-    input_ids = torch.from_numpy(f["train/input_ids"][()])
-    myinput_ids = torch.from_numpy(f["train/myinput_ids"][()])
-    input_mask = torch.from_numpy(f["train/input_mask"][()])
-    segment_ids = torch.from_numpy(f["train/segment_ids"][()])
-    label_ent_ids = torch.from_numpy(f["train/label_ent_ids"][()])
-    label_emo_ids = torch.from_numpy(f["train/label_emo_ids"][()])
-    assert input_ids.size() == segment_ids.size() == label_ent_ids.size() == label_emo_ids.size() == myinput_ids.size()
-    print("train dataset num: ", input_ids.size(0))
-    trn_dataset = TensorDataset(input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids)
+    input_ids_trn = torch.from_numpy(f["train/input_ids"][()])
+    myinput_ids_trn = torch.from_numpy(f["train/myinput_ids"][()])
+    input_mask_trn = torch.from_numpy(f["train/input_mask"][()])
+    segment_ids_trn = torch.from_numpy(f["train/segment_ids"][()])
+    label_ent_ids_trn = torch.from_numpy(f["train/label_ent_ids"][()])
+    label_emo_ids_trn = torch.from_numpy(f["train/label_emo_ids"][()])
+    assert input_ids_trn.size() == segment_ids_trn.size() == label_ent_ids_trn.size() == label_emo_ids_trn.size() == myinput_ids_trn.size()
 
-    input_ids = torch.from_numpy(f["val/input_ids"][()])
-    myinput_ids = torch.from_numpy(f["val/myinput_ids"][()])
-    input_mask = torch.from_numpy(f["val/input_mask"][()])
-    segment_ids = torch.from_numpy(f["val/segment_ids"][()])
-    label_ent_ids = torch.from_numpy(f["val/label_ent_ids"][()])
-    label_emo_ids = torch.from_numpy(f["val/label_emo_ids"][()])
-    assert input_ids.size() == segment_ids.size() == label_ent_ids.size() == label_emo_ids.size() == myinput_ids.size()
-    val_dataset = TensorDataset(input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids)
-    print("val dataset num: ", input_ids.size(0))
+    input_ids_val = torch.from_numpy(f["val/input_ids"][()])
+    myinput_ids_val = torch.from_numpy(f["val/myinput_ids"][()])
+    input_mask_val = torch.from_numpy(f["val/input_mask"][()])
+    segment_ids_val = torch.from_numpy(f["val/segment_ids"][()])
+    label_ent_ids_val = torch.from_numpy(f["val/label_ent_ids"][()])
+    label_emo_ids_val = torch.from_numpy(f["val/label_emo_ids"][()])
+    assert input_ids_val.size() == segment_ids_val.size() == label_ent_ids_val.size() == label_emo_ids_val.size() == myinput_ids_val.size()
     f.close()
     print("read h5 over!")
-    print(f"bs: {args.batch_size}\nval_bs: {args.val_batch_size}")
-    # ------------------------------- 可以从 H5Dataset2 继承优化 -------------------------
-    # trn_dataset = H5Dataset3("../datasets/data_full_title.h5", "train")
-    # val_dataset = H5Dataset3("../datasets/data_full_title.h5", "val")
+    input_ids = torch.cat([input_ids_trn, input_ids_val], dim=0)
+    myinput_ids = torch.cat([myinput_ids_trn, myinput_ids_val], dim=0)
+    input_mask = torch.cat([input_mask_trn, input_mask_val], dim=0)
+    segment_ids = torch.cat([segment_ids_trn, segment_ids_val], dim=0)
+    label_ent_ids = torch.cat([label_ent_ids_trn, label_ent_ids_val], dim=0)
+    label_emo_ids = torch.cat([label_emo_ids_trn, label_emo_ids_val], dim=0)
+    dataset = TensorDataset(input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids)
 
+    return dataset
+
+
+def get_data_loader(dataset, cv):
+    print(f"get dataloader {cv}")
+    # 从 index 中取出 trn_dataset val_dataset
+    if not args.lite:
+        index_file = "kfold/5cv_indexs_{}".format(cv)
+    else:
+        index_file = "kfold/5cv_indexs_{}_lite".format(cv)
+
+    if os.path.exists(index_file):
+        trn_index, val_index = load_data(index_file)
+        trn_dataset = [dataset[idx] for idx in trn_index]
+        val_dataset = [dataset[idx] for idx in val_index]
+    else:
+        print("Not find index file!")
+        exit(0)
     # ---------------------------------------------------------------------
     trn_dataloader = DataLoader(trn_dataset, sampler=RandomSampler(trn_dataset), batch_size=args.batch_size,
                                 num_workers=args.nw, pin_memory=True)
@@ -72,7 +91,9 @@ def get_data_loader():
     return trn_dataloader, val_dataloader, len(trn_dataset)
 
 
-def train():
+def train(dataset, cv):
+    print(f"training  cv: {cv}")
+
     ################################ Model Config ###################################
     num_labels_emo = 4  # O POS NEG NORM
     num_labels_ent = 3  # O B I
@@ -95,11 +116,7 @@ def train():
     # alpha = 0.8
     # alpha = 0.7
     # alphas = [1, 0.9, 0.8, 0.8, 0.8, 0.8, 0.8]
-    if not args.multi:
-        alpha = args.alpha
-    else:
-        alphas = [1e-5, 1e-2, 1e-1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        print("alphas: ", " ".join(map(str, alphas)))
+    alpha = args.alpha
     # alphas = [2,1,1,0.8,0.8,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]
     # ------------------------------ load model from file -------------------------
     model_file = os.path.join(args.checkpoint_model_dir, args.ckp)
@@ -108,7 +125,7 @@ def train():
         print("load checkpoint: {} successfully!".format(model_file))
     # -----------------------------------------------------------------------------
 
-    trn_dataloader, val_dataloader, trn_size = get_data_loader()
+    trn_dataloader, val_dataloader, trn_size = get_data_loader(dataset, cv)
 
     ############################## Optimizer ###################################
     param_optimizer = list(model.named_parameters())
@@ -148,6 +165,8 @@ def train():
         if not args.multi:
             loss = alpha * loss_ent + loss_emo
         else:
+            alphas = [1e-5, 1e-2, 1e-1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            print("alphas: ", " ".join(map(str, alpha)))
             loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
 
         if engine.state.metrics.get("total_loss") is None:
@@ -178,10 +197,7 @@ def train():
             # loss_emo = criterion_fl(act_logits_emo, act_y_emo)
             loss_emo = criterion(act_logits_emo, act_y_emo)
             # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
-            if not args.multi:
-                loss = alpha * loss_ent + loss_emo
-            else:
-                loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
+            loss = alpha * loss_ent + loss_emo
 
             if engine.state.metrics.get("total_loss") is None:
                 engine.state.metrics["total_loss"] = 0
@@ -253,6 +269,12 @@ def train():
                 engine.state.metrics["total_loss"],
                 engine.state.metrics["ent_loss"],
                 engine.state.metrics["emo_loss"]))
+        # Save a trained model and the associated configuration
+        # model_to_save = model.module if hasattr(model,
+        #                                         'module') else model  # Only save the model it-self
+        output_model_file = f"../ckps/cv/cv{cv}.pth"
+        torch.save(model.state_dict(), output_model_file)
+        print(f"save {output_model_file} successfully!")
 
     ######################################################################
 
@@ -262,10 +284,12 @@ def train():
         # loss = engine.state.metrics["loss"]
         return f1
 
+    '''     
     if not args.lite:
-        ckp_dir = os.path.join(args.checkpoint_model_dir, "full", args.hyper_cfg)
+        ckp_dir = os.path.join(args.checkpoint_model_dir, "full", "cv", str(cv), args.hyper_cfg)
     else:
-        ckp_dir = os.path.join(args.checkpoint_model_dir, "lite", args.hyper_cfg)
+        ckp_dir = os.path.join(args.checkpoint_model_dir, "lite", "cv", str(cv), args.hyper_cfg)
+    
     checkpoint_handler = ModelCheckpoint(ckp_dir,
                                          'ckp',
                                          # save_interval=args.checkpoint_interval,
@@ -274,10 +298,12 @@ def train():
                                          n_saved=5,
                                          require_empty=False, create_dir=True)
 
-    # trainer.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
-    #                           to_save={'model_3FC': model})
+    trainer.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
+                               to_save={'model_3FC': model})
+    
     val_evaluator.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
-                                    to_save={'model_title': model})
+                                   to_save={'model_title': model})
+    '''
 
     ######################################################################
 
@@ -290,9 +316,9 @@ def train():
     #################################### tb logger ##################################
     # 在已经在对应基础上计算了 metric 的值 (compute_metric) 后 取值 log
     if not args.lite:
-        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "full", args.hyper_cfg))
+        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "full", "cv", str(cv), args.hyper_cfg))
     else:
-        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "lite", args.hyper_cfg))
+        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "lite", "cv", str(cv), args.hyper_cfg))
 
     tb_logger.attach(trainer,
                      log_handler=OutputHandler(tag="training", output_transform=lambda x: {'batchloss': x[0]}),
@@ -360,14 +386,14 @@ if __name__ == '__main__':
                         help='input batch size for training8 (default: 64)')
     parser.add_argument('--val_batch_size', type=int, default=48,
                         help='input batch size for validation (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=3,
+    parser.add_argument('--epochs', type=int, default=1,
                         help='number of epochs to train (default: 10)')
     parser.add_argument('--nw', type=int, default=4,
                         help='number of nw')
     parser.add_argument('--lr', type=float, default=3e-5,
                         help='learning rate (default: 0.01)')
-    parser.add_argument("--alpha", type=float, default=1, help="alpha")
-    parser.add_argument("--wd", type=float, default=0.01, help="weight decay")
+    parser.add_argument("--alpha", type=float, default=3, help="alpha")
+    parser.add_argument("--wd", type=float, default=0.1, help="weight decay")
     parser.add_argument('--momentum', type=float, default=0.5,
                         help='SGD momentum (default: 0.5)')
     parser.add_argument('--log_interval', type=int, default=10,
@@ -388,7 +414,7 @@ if __name__ == '__main__':
                         help="Proportion of training to perform linear learning rate warmup for. "
                              "E.g., 0.1 = 10%% of training.")
     parser.add_argument("--dp",
-                        default=0.1,
+                        default=0.5,
                         type=float,
                         help="")
     parser.add_argument("--gamma",
@@ -407,4 +433,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    train()
+    # 5 fold
+    dataset = get_all_data()
+    for cv in range(1, 6):
+        train(dataset, cv)
