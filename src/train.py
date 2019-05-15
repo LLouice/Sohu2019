@@ -198,20 +198,26 @@ def train():
     trainer = Engine(step)
     trn_evaluator = Engine(infer)
     val_evaluator = Engine(infer)
+    val_evaluator_iteration = Engine(infer)
 
     ############################## Custom Period Event ###################################
-    cpe1 = CustomPeriodicEvent(n_epochs=1)
-    cpe1.attach(trainer)
-    cpe2 = CustomPeriodicEvent(n_epochs=2)
-    cpe2.attach(trainer)
-    cpe3 = CustomPeriodicEvent(n_epochs=3)
-    cpe3.attach(trainer)
-    cpe5 = CustomPeriodicEvent(n_epochs=5)
-    cpe5.attach(trainer)
+    '''
+        cpe1 = CustomPeriodicEvent(n_epochs=1)
+        cpe1.attach(trainer)
+        cpe2 = CustomPeriodicEvent(n_epochs=2)
+        cpe2.attach(trainer)
+        cpe3 = CustomPeriodicEvent(n_epochs=3)
+        cpe3.attach(trainer)
+        cpe5 = CustomPeriodicEvent(n_epochs=5)
+        cpe5.attach(trainer)
+    '''
+    eval(f"cpe{args.eval_step} = CustomPeriodicEvent(n_iterations={args.eval_step})")
+    eval(f"cpe{args.eval_step}.attach(trainer)")
 
     ############################## My F1 ###################################
     F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]])
     F1.attach(val_evaluator, "F1")
+    F1.attach(val_evaluator_iteration, "F1")
 
     #####################################  progress bar #########################
     RunningAverage(output_transform=lambda x: x[0]).attach(trainer, 'batch_loss')
@@ -219,7 +225,6 @@ def train():
     pbar.attach(trainer, metric_names=["batch_loss"])
 
     #####################################  Evaluate #########################
-
     @trainer.on(Events.EPOCH_COMPLETED)
     def compute_val_metric(engine):
         # trainer engine
@@ -230,7 +235,6 @@ def train():
             "Training - total_loss: {:.4f} ent_loss: {:.4f} emo_loss: {:.4f}".format(engine.state.metrics["total_loss"],
                                                                                      engine.state.metrics["ent_loss"],
                                                                                      engine.state.metrics["emo_loss"]))
-
         val_evaluator.run(val_dataloader)
 
         metrics = val_evaluator.state.metrics
@@ -242,6 +246,20 @@ def train():
                 .format(engine.state.epoch, ent_loss, emo_loss, f1))
 
         pbar.n = pbar.last_print_n = 0
+        # trainer.add_event_handler(Events.EPOCH_COMPLETED, compute_val_metric)
+
+    def compute_val_metric_iteration(engine):
+        # trainer engine
+        val_evaluator_iteration.run(val_dataloader)
+        metrics = val_evaluator_iteration.state.metrics
+        f1 = metrics['F1']
+        pbar.log_message(
+            "Validation Results - Iteration: {} F1: {:.4f}"
+                .format(engine.state.iteration, f1))
+        pbar.n = pbar.last_print_n = 0
+
+    trainer.add_event_handler(eval(f"cpe{args.eval_step}.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
+                              compute_val_metric_iteration)
 
     @val_evaluator.on(Events.EPOCH_COMPLETED)
     def reduct_step(engine):
@@ -320,6 +338,12 @@ def train():
     tb_logger.attach(val_evaluator,
                      log_handler=OutputHandler(tag="validation",
                                                metric_names=["total_loss", "ent_loss", "emo_loss", "F1"],
+                                               another_engine=trainer),
+                     event_name=Events.EPOCH_COMPLETED)
+
+    tb_logger.attach(val_evaluator_iteration,
+                     log_handler=OutputHandler(tag="validation_iteration",
+                                               metric_names=["F1"],
                                                another_engine=trainer),
                      event_name=Events.EPOCH_COMPLETED)
 
@@ -404,6 +428,10 @@ if __name__ == '__main__':
     parser.add_argument("--multi",
                         action="store_true",
                         help="multi alpha or not")
+    parser.add_argument("--eval_step",
+                        type=int,
+                        default=200000000,
+                        help="the step to val")
 
     args = parser.parse_args()
 
