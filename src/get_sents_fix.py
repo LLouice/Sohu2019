@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Time    : 2019/4/13 11:50
+# @Time    : 2019/5/15 19:20
 # @Author  : 邵明岩
-# @File    : data_process_v1.py
+# @File    : get_sents_fix.py
 # @Software: PyCharm
 
 import re
 import pickle
 from zhon import hanzi
+import string
+import json
+import html
 
 
 def data_dump(data, file):
@@ -128,7 +131,6 @@ def get_sentences(content):
     return res
 
 
-
 def seg_char(sent):
     """
     把句子按字分开，不破坏英文结构
@@ -162,20 +164,49 @@ def get_core_entityemotions(entityemotions):
     results = []
     for ee in entityemotions:
         result = {}
-        result['entity'] = seg_char(ee['entity'])
+        result['entity'] = seg_char(clean_text(ee['entity']))
         result['emotion'] = ee['emotion']
         results.append(result)
 
     return results
 
 
+def ishan(char):
+    # for python 3.x
+    # sample: ishan('一') == True, ishan('我&&你') == False
+    return '\u4e00' <= char <= '\u9fff'
+
+
+def clean_text(text):
+    new_text = []
+    for char in text:
+        if ishan(char) or char in string.digits or char in string.ascii_letters or char in (hanzi.punctuation + string.punctuation):
+            new_text.append(char)
+        elif char == '\t' or char == ' ':
+            new_text.append(' ')
+        else:
+            continue
+
+    new_text = ''.join(new_text)
+    new_text = re.sub(r' +', ' ', new_text)
+    new_text = html.unescape(new_text)
+    new_text = re.sub(
+        r'(http|ftp)s?://([^\u4e00-\u9fa5＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､\u3000、〃〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏﹑﹔·！？｡。])*',
+        '', new_text)
+    new_text = re.sub(r'[!"#%&\'()*+-./:;<=>?@[\]^_`{|}~]{2,}', '', new_text)
+
+    return new_text
+
+
 if __name__ == '__main__':
 
-    datas_process = pickle.load(open('new_data/coreEntityEmotion_example.pkl', 'rb'))
+    f = open('../data/coreEntityEmotion_example.txt', 'r')
     datas = []
     datas_em = []
-    all_index = len(datas_process)
-    for index, data in enumerate(datas_process):
+    all_index = len(f.readlines())
+    f.seek(0)
+    for index, line in enumerate(f.readlines()):
+        data = json.loads(line)
         print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data_em = {}
@@ -185,23 +216,24 @@ if __name__ == '__main__':
         new_data['coreEntityEmotions'] = get_core_entityemotions(data['coreEntityEmotions'])
         new_data_em['coreEntityEmotions'] = new_data['coreEntityEmotions']
 
-        if len(data['title']) > 125:
-            data['title'] = data['title'][:125]
+        title = clean_text(data['title'].strip())
+
+        if len(title) > 125:
+            title = title[:125]
             print('warning:标题被截断!!')
-        title = seg_char(data['title'])
+        title = seg_char(title)
         title_labels = get_label_no_emotion(title, new_data['coreEntityEmotions'])
         assert len(title) == len(title_labels)
         new_data['title'] = (title, title_labels)
         title_labels = get_label(title, new_data['coreEntityEmotions'])
         assert len(title) == len(title_labels)
         new_data_em['title'] = (title, title_labels)
-
-        if len(data['content']) == 0:
+        data['content'] = clean_text(data['content'].strip())
+        if len(data['content'].strip()) == 0:
             new_data['content'] = []
             new_data_em['content'] = []
             pass
         else:
-            data['content'] = data['content'].strip()
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
             sentences = get_sentences(data['content'])
@@ -221,14 +253,17 @@ if __name__ == '__main__':
         datas.append(new_data)
         datas_em.append(new_data_em)
 
-    data_dump(datas, 'new_data2/example_ner_no_emotion.pkl')
-    data_dump(datas_em, 'new_data2/example_ner_has_emotion.pkl')
+    f.close()
+    data_dump(datas, '../datasets/example_ner_no_emotion.pkl')
+    data_dump(datas_em, '../datasets/example_ner_has_emotion.pkl')
 
-    datas_process = pickle.load(open('new_data/coreEntityEmotion_train.pkl', 'rb'))
+    f = open('../data/coreEntityEmotion_train.txt', 'r')
     datas = []
     datas_em = []
-    all_index = len(datas_process)
-    for index, data in enumerate(datas_process):
+    all_index = len(f.readlines())
+    f.seek(0)
+    for index, line in enumerate(f.readlines()):
+        data = json.loads(line)
         print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data_em = {}
@@ -238,23 +273,24 @@ if __name__ == '__main__':
         new_data['coreEntityEmotions'] = get_core_entityemotions(data['coreEntityEmotions'])
         new_data_em['coreEntityEmotions'] = new_data['coreEntityEmotions']
 
-        if len(data['title']) > 125:
-            data['title'] = data['title'][:125]
+        title = clean_text(data['title'].strip())
+
+        if len(title) > 125:
+            title = title[:125]
             print('warning:标题被截断!!')
-        title = seg_char(data['title'])
+        title = seg_char(title)
         title_labels = get_label_no_emotion(title, new_data['coreEntityEmotions'])
         assert len(title) == len(title_labels)
         new_data['title'] = (title, title_labels)
         title_labels = get_label(title, new_data['coreEntityEmotions'])
         assert len(title) == len(title_labels)
         new_data_em['title'] = (title, title_labels)
-
-        if len(data['content']) == 0:
+        data['content'] = clean_text(data['content'].strip())
+        if len(data['content'].strip()) == 0:
             new_data['content'] = []
             new_data_em['content'] = []
             pass
         else:
-            data['content'] = data['content'].strip()
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
             sentences = get_sentences(data['content'])
@@ -274,27 +310,30 @@ if __name__ == '__main__':
         datas.append(new_data)
         datas_em.append(new_data_em)
 
-    data_dump(datas, 'new_data2/train_ner_no_emotion.pkl')
-    data_dump(datas_em, 'new_data2/train_ner_has_emotion.pkl')
+    f.close()
+    data_dump(datas, '../datasets/train_ner_no_emotion.pkl')
+    data_dump(datas_em, '../datasets/train_ner_has_emotion.pkl')
 
-
-    datas_process = pickle.load(open('new_data/coreEntityEmotion_test.pkl', 'rb'))
+    f = open('../data/coreEntityEmotion_test_stage2.txt', 'r')
     datas = []
-    all_index = len(datas_process)
-    for index, data in enumerate(datas_process):
+    all_index = len(f.readlines())
+    f.seek(0)
+    for index, line in enumerate(f.readlines()):
+        data = json.loads(line)
         print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data['newsId'] = data['newsId']
+
+        data['title'] = clean_text(data['title'].strip())
         if len(data['title']) > 125:
             data['title'] = data['title'][:125]
             print('warning:标题被截断!!')
         title = seg_char(data['title'])
         new_data['title'] = title
-
-        if len(data['content']) == 0:
+        data['content'] = clean_text(data['content'].strip())
+        if len(data['content'].strip()) == 0:
             new_data['content'] = []
         else:
-            data['content'] = data['content'].strip()
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
             sentences = get_sentences(data['content'])
@@ -306,5 +345,5 @@ if __name__ == '__main__':
 
         datas.append(new_data)
 
-    data_dump(datas, 'new_data2/test_ner.pkl')
-
+    f.close()
+    data_dump(datas, '../datasets/test_ner2.pkl')
