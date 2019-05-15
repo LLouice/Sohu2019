@@ -171,59 +171,59 @@ def get_core_entityemotions(entityemotions):
 
 if __name__ == '__main__':
 
-    # datas_process = pickle.load(open('new_data/coreEntityEmotion_example.pkl', 'rb'))
-    # datas = []
-    # datas_em = []
-    # all_index = len(datas_process)
-    # for index, data in enumerate(datas_process):
-    #     print('{}/{}'.format(index, all_index))
-    #     new_data = {}
-    #     new_data_em = {}
-    #     new_data['newsId'] = data['newsId']
-    #     new_data_em['newsId'] = data['newsId']
-    #
-    #     new_data['coreEntityEmotions'] = get_core_entityemotions(data['coreEntityEmotions'])
-    #     new_data_em['coreEntityEmotions'] = new_data['coreEntityEmotions']
-    #
-    #     if len(data['title']) > 125:
-    #         data['title'] = data['title'][:125]
-    #         print('warning:标题被截断!!')
-    #     title = seg_char(data['title'])
-    #     title_labels = get_label_no_emotion(title, new_data['coreEntityEmotions'])
-    #     assert len(title) == len(title_labels)
-    #     new_data['title'] = (title, title_labels)
-    #     title_labels = get_label(title, new_data['coreEntityEmotions'])
-    #     assert len(title) == len(title_labels)
-    #     new_data_em['title'] = (title, title_labels)
-    #
-    #     if len(data['content']) == 0:
-    #         new_data['content'] = []
-    #         new_data_em['content'] = []
-    #         pass
-    #     else:
-    #         data['content'] = data['content'].strip()
-    #         if data['content'][-1] not in '。｡！!？?':
-    #             data['content'] = data['content'] + '。'
-    #         sentences = get_sentences(data['content'])
-    #         sentences = seg_char_sents(sentences)
-    #         content = []
-    #         content_em = []
-    #         for sent in sentences:
-    #             sent_labels = get_label_no_emotion(sent, new_data['coreEntityEmotions'])
-    #             assert len(sent) == len(sent_labels)
-    #             content.append((sent, sent_labels))
-    #             sent_labels = get_label(sent, new_data['coreEntityEmotions'])
-    #             assert len(sent) == len(sent_labels)
-    #             content_em.append((sent, sent_labels))
-    #         new_data['content'] = content
-    #         new_data_em['content'] = content_em
-    #
-    #     datas.append(new_data)
-    #     datas_em.append(new_data_em)
-    #
-    # data_dump(datas, 'new_data2/example_ner_no_emotion.pkl')
-    # data_dump(datas_em, 'new_data2/example_ner_has_emotion.pkl')
-    #
+    datas_process = pickle.load(open('new_data/coreEntityEmotion_example.pkl', 'rb'))
+    datas = []
+    datas_em = []
+    all_index = len(datas_process)
+    for index, data in enumerate(datas_process):
+        print('{}/{}'.format(index, all_index))
+        new_data = {}
+        new_data_em = {}
+        new_data['newsId'] = data['newsId']
+        new_data_em['newsId'] = data['newsId']
+
+        new_data['coreEntityEmotions'] = get_core_entityemotions(data['coreEntityEmotions'])
+        new_data_em['coreEntityEmotions'] = new_data['coreEntityEmotions']
+
+        if len(data['title']) > 125:
+            data['title'] = data['title'][:125]
+            print('warning:标题被截断!!')
+        title = seg_char(data['title'])
+        title_labels = get_label_no_emotion(title, new_data['coreEntityEmotions'])
+        assert len(title) == len(title_labels)
+        new_data['title'] = (title, title_labels)
+        title_labels = get_label(title, new_data['coreEntityEmotions'])
+        assert len(title) == len(title_labels)
+        new_data_em['title'] = (title, title_labels)
+
+        if len(data['content']) == 0:
+            new_data['content'] = []
+            new_data_em['content'] = []
+            pass
+        else:
+            data['content'] = data['content'].strip()
+            if data['content'][-1] not in '。｡！!？?':
+                data['content'] = data['content'] + '。'
+            sentences = get_sentences(data['content'])
+            sentences = seg_char_sents(sentences)
+            content = []
+            content_em = []
+            for sent in sentences:
+                sent_labels = get_label_no_emotion(sent, new_data['coreEntityEmotions'])
+                assert len(sent) == len(sent_labels)
+                content.append((sent, sent_labels))
+                sent_labels = get_label(sent, new_data['coreEntityEmotions'])
+                assert len(sent) == len(sent_labels)
+                content_em.append((sent, sent_labels))
+            new_data['content'] = content
+            new_data_em['content'] = content_em
+
+        datas.append(new_data)
+        datas_em.append(new_data_em)
+
+    data_dump(datas, 'new_data2/example_ner_no_emotion.pkl')
+    data_dump(datas_em, 'new_data2/example_ner_has_emotion.pkl')
+
     datas_process = pickle.load(open('new_data/coreEntityEmotion_train.pkl', 'rb'))
     datas = []
     datas_em = []
@@ -278,33 +278,33 @@ if __name__ == '__main__':
     data_dump(datas_em, 'new_data2/train_ner_has_emotion.pkl')
 
 
-    # datas_process = pickle.load(open('new_data/coreEntityEmotion_test.pkl', 'rb'))
-    # datas = []
-    # all_index = len(datas_process)
-    # for index, data in enumerate(datas_process):
-    #     print('{}/{}'.format(index, all_index))
-    #     new_data = {}
-    #     new_data['newsId'] = data['newsId']
-    #     if len(data['title']) > 125:
-    #         data['title'] = data['title'][:125]
-    #         print('warning:标题被截断!!')
-    #     title = seg_char(data['title'])
-    #     new_data['title'] = title
-    #
-    #     if len(data['content']) == 0:
-    #         new_data['content'] = []
-    #     else:
-    #         data['content'] = data['content'].strip()
-    #         if data['content'][-1] not in '。｡！!？?':
-    #             data['content'] = data['content'] + '。'
-    #         sentences = get_sentences(data['content'])
-    #         sentences = seg_char_sents(sentences)
-    #         content = []
-    #         for sent in sentences:
-    #             content.append(sent)
-    #         new_data['content'] = content
-    #
-    #     datas.append(new_data)
-    #
-    # data_dump(datas, 'new_data2/test_ner.pkl')
+    datas_process = pickle.load(open('new_data/coreEntityEmotion_test.pkl', 'rb'))
+    datas = []
+    all_index = len(datas_process)
+    for index, data in enumerate(datas_process):
+        print('{}/{}'.format(index, all_index))
+        new_data = {}
+        new_data['newsId'] = data['newsId']
+        if len(data['title']) > 125:
+            data['title'] = data['title'][:125]
+            print('warning:标题被截断!!')
+        title = seg_char(data['title'])
+        new_data['title'] = title
+
+        if len(data['content']) == 0:
+            new_data['content'] = []
+        else:
+            data['content'] = data['content'].strip()
+            if data['content'][-1] not in '。｡！!？?':
+                data['content'] = data['content'] + '。'
+            sentences = get_sentences(data['content'])
+            sentences = seg_char_sents(sentences)
+            content = []
+            for sent in sentences:
+                content.append(sent)
+            new_data['content'] = content
+
+        datas.append(new_data)
+
+    data_dump(datas, 'new_data2/test_ner.pkl')
 
