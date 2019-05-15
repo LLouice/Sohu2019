@@ -95,7 +95,11 @@ def train():
     # alpha = 0.8
     # alpha = 0.7
     # alphas = [1, 0.9, 0.8, 0.8, 0.8, 0.8, 0.8]
-    alpha = args.alpha
+    if not args.multi:
+        alpha = args.alpha
+    else:
+        alphas = [1e-5, 1e-2, 1e-1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        print("alphas: ", " ".join(map(str, alphas)))
     # alphas = [2,1,1,0.8,0.8,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]
     # ------------------------------ load model from file -------------------------
     model_file = os.path.join(args.checkpoint_model_dir, args.ckp)
@@ -144,9 +148,7 @@ def train():
         if not args.multi:
             loss = alpha * loss_ent + loss_emo
         else:
-            alphas = [1e-5, 1e-2, 1e-1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-            print("alphas: "," ".join(map(str,alpha)))
-            loss = loss_ent + alphas[engine.state.epoch-1]*loss_emo
+            loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
 
         if engine.state.metrics.get("total_loss") is None:
             engine.state.metrics["total_loss"] = 0
@@ -176,7 +178,10 @@ def train():
             # loss_emo = criterion_fl(act_logits_emo, act_y_emo)
             loss_emo = criterion(act_logits_emo, act_y_emo)
             # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
-            loss = alpha * loss_ent + loss_emo
+            if not args.multi:
+                loss = alpha * loss_ent + loss_emo
+            else:
+                loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
 
             if engine.state.metrics.get("total_loss") is None:
                 engine.state.metrics["total_loss"] = 0
