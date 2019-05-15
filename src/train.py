@@ -296,6 +296,8 @@ def train():
     #                           to_save={'model_3FC': model})
     val_evaluator.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
                                     to_save={'model_title': model})
+    val_evaluator_iteration.add_event_handler(event_name=eval(f"cpe{args.eval_step}.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
+                                              handler=checkpoint_handler, to_save={"model_iter": model})
 
     ######################################################################
 
