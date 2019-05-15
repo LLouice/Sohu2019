@@ -78,24 +78,59 @@ def run():
         pred_ent_raw, pred_emo_raw = engine.state.output
         pred_ent = torch.argmax(torch.softmax(pred_ent_raw, dim=-1), dim=-1)  # [-1, 128]
         pred_emo = torch.argmax(torch.softmax(pred_emo_raw, dim=-1), dim=-1)  # [-1, 128]
-        old_size = ent.shape[0]
-        ent.resize(old_size + batch_size, axis=0)
-        emo.resize(old_size + batch_size, axis=0)
-        ent[old_size: old_size + batch_size] = pred_ent.cpu()
-        emo[old_size: old_size + batch_size] = pred_emo.cpu()
-        if args.raw:
-            ent_raw.resize(old_size + batch_size, axis=0)
-            emo_raw.resize(old_size + batch_size, axis=0)
-            ent_raw[old_size: old_size + batch_size] = pred_ent_raw.cpu()
-            emo_raw[old_size: old_size + batch_size] = pred_emo_raw.cpu()
+
+        def add_io():
+            old_size = ent.shape[0]
+            ent.resize(old_size + batch_size, axis=0)
+            emo.resize(old_size + batch_size, axis=0)
+            ent[old_size: old_size + batch_size] = pred_ent.cpu()
+            emo[old_size: old_size + batch_size] = pred_emo.cpu()
+            if args.raw:
+                ent_raw.resize(old_size + batch_size, axis=0)
+                emo_raw.resize(old_size + batch_size, axis=0)
+                ent_raw[old_size: old_size + batch_size] = pred_ent_raw.cpu()
+                emo_raw[old_size: old_size + batch_size] = pred_emo_raw.cpu()
+
+        def add_men():
+            if engine.state.metrics.get("preds_ent") is None:
+                engine.state.metrics["preds_ent"] = []
+                engine.state.metrics["preds_emo"] = []
+                if args.raw:
+                    engine.state.metrics["preds_ent_raw"] = []
+                    engine.state.metrics["preds_emo_raw"] = []
+
+            else:
+                engine.state.metrics["preds_ent"].append(pred_ent.cpu())
+                engine.state.metrics["preds_emo"].append(pred_emo.cpu())
+                if args.raw:
+                    engine.state.metrics["preds_ent_raw"].append(pred_ent_raw.cpu())
+                    engine.state.metrics["preds_emo_raw"].append(pred_emo_raw.cpu())
+
+        add_men()
 
     pbar_test = ProgressBar(persist=True)
     pbar_test.attach(tester)
 
     @tester.on(Events.EPOCH_COMPLETED)
-    def close_h5(engine):
-        print("test over")
+    def save_and_close(engine):
+        if engine.state.metrics.get("preds_ent") is not None:
+            preds_ent = torch.cat(engine.state.metrics["preds_ent"], dim=0)
+            preds_emo = torch.cat(engine.state.metrics["preds_emo"], dim=0)
+            assert preds_ent.size(0) == preds_emo.size(0)
+            ent.resize(preds_ent.size(0), axis=0)
+            emo.resize(preds_emo.size(0), axis=0)
+            ent[...] = preds_ent
+            emo[...] = preds_emo
+            if args.raw:
+                preds_ent_raw = torch.cat(engine.state.metrics["preds_ent_raw"], dim=0)
+                preds_emo_raw = torch.cat(engine.state.metrics["preds_emo_raw"], dim=0)
+                ent_raw.resize(preds_ent_raw.size(0), axis=0)
+                emo_raw.resize(preds_emo_raw.size(0), axis=0)
+                ent_raw[...] = preds_ent_raw
+                emo_raw[...] = preds_emo_raw
+            print("pred size: ", ent.shape)
         f.close()
+        print("test over")
 
     tester.run(test_dataloader)
 
@@ -118,8 +153,6 @@ if __name__ == '__main__':
     parser.add_argument("--raw",
                         action="store_true",
                         help="是否存储置信度")
-
-
 
     args = parser.parse_args()
 
