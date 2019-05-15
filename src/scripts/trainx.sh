@@ -27,6 +27,21 @@ run_lite(){
         --lite \
         &>> ../logs/lite.log
 }
+run_lite_emo(){
+    python -u trainx.py \
+        --lr=${lr} \
+        --batch_size=${bs} \
+        --val_batch_size=${val_bs} \
+        --epochs=${epos} \
+        --alpha=${alpha} \
+        --warmup_proportion=${warm} \
+        --dp=${dp} \
+        --wd=${wd} \
+        --hyper_cfg=a_${alpha}_lr_${lr}_dp_${dp}_wu_${warm}_wd_${wd} \
+        --lite \
+        --emo \
+        &>> ../logs/lite.log
+}
 run_full(){
     python -u trainx.py \
         --lr=${lr} \
@@ -42,3 +57,4 @@ run_full(){
 }
 
 run_lite
+run_lite_emo
