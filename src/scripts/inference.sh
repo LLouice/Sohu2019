@@ -8,18 +8,24 @@ pred="pred_new.h5"
 
 cd ../.
 
-python -u test.py \
-    --test_batch_size=${test_batch_size} \
-    --best_model=${best_model} \
+test(){
+    python -u test.py \
+        --test_batch_size=${test_batch_size} \
+        --best_model=${best_model} \
     --pred=${pred}
+}
 
 
 
 res="result_new.txt"
 
-python -u get_result.py \
-    --pred=${pred} \
-    --res=${res}
+get_res(){
+    python -u get_result.py \
+        --pred=${pred} \
+        --res=${res}
+}
 
+test
+get_res
 echo "over!"
 
