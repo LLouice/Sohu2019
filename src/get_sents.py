@@ -1,13 +1,25 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Time    : 2019/4/13 11:50
+# @Time    : 2019/5/15 19:25
 # @Author  : 邵明岩
-# @File    : data_process_v1.py
+# @File    : get_sents.py
 # @Software: PyCharm
 
 import re
 import pickle
 from zhon import hanzi
+import string
+import json
+import random
+
+
+def Unicode():
+    val = random.randint(0x4e00, 0x9fbf)
+    return chr(val)
+
+
+def hash_ch(len_text):
+    return ''.join([Unicode() for _ in range(len_text)])
 
 
 def data_dump(data, file):
@@ -80,7 +92,55 @@ def get_label_no_emotion(sent, entity):
     return ner
 
 
+symbol_list = [('【', '】'), ('（', '）'), ('“', '”'), ('「', '」'), ('《', '》')]
+
+
+def get_entity_mask(text):
+    pattern = r'{}[^{}\n\r]+{}'
+    pattern2 = r'{}[^{}。｡！!？?\n\r]+{}'
+
+    mask_texts_set = set()
+    for symbol in symbol_list:
+        symbol1 = symbol[0]
+        symbol2 = symbol[1]
+        if symbol1 == '“':
+            res = re.findall(pattern2.format(symbol1, symbol2, symbol2), text)
+        else:
+            res = re.findall(pattern.format(symbol1, symbol2, symbol2), text)
+        for r in res:
+            mask_texts_set.add(r)
+
+    mask_texts_set = list(mask_texts_set)
+    mask_texts_set.sort(key=lambda x: len(x), reverse=True)
+    mask_texts = []
+    for t in mask_texts_set:
+        lent = len(t)
+        while True:
+            h = str(hash_ch(lent))
+            if h not in text:
+                break
+        assert len(t) == len(h)
+        mask_texts.append((t, h))
+
+    for t, h in mask_texts:
+        text = text.replace(t, h)
+
+    return mask_texts, text
+
+
+def get_real_text(mask_texts, text):
+    for t, h in mask_texts:
+        text = text.replace(h, t)
+    return text
+
+
+# 虽然是可变长的batch要的数据，但是过长的句子也是不可行的，这里
+# 最长用600，仅占2912458个句子中的938条
+
 def get_sentences(content):
+    # mask一写书名号等
+    mask_texts, content = get_entity_mask(content)
+
     # 基本分句，。|｡|！|\!|？|\?，用这6个符号分
     sentences = re.split(r'(。|｡|！|\!|？|\?)', content)  # 保留分割符
     new_sents = []
@@ -90,23 +150,25 @@ def get_sentences(content):
         new_sents.append(sent)
     res = []
     sentence = ''
+    max_len = 600
     for sent in new_sents:
         temp_sents = []
-        if len(sent) > 100:  # 大于100长度继续分，；|、|,|，|﹔|､，6个次级分句
+        if len(sent) > max_len:  # 大于max_len长度继续分，；|、|,|，|﹔|､，6个次级分句
             sents = re.split(r'(；|、|,|，|﹔|､)', sent)  # 保留分割符
             for s in sents:
-                if len(s) > 100:  # 子分句也大于100，采用截断式分句
+                if len(s) > max_len:  # 子分句也大于max_len，采用截断式分句
+                    s = get_real_text(mask_texts, s)  # 还原mask
                     ss = []
-                    j = 100
+                    j = max_len
                     while j < len(s):
-                        ss.append(s[j - 100:j])
-                        j = j + 100
-                    if len(s[j - 100:len(s)]) < 20:
-                        temp = ss[-1] + s[j - 10:len(s)]
+                        ss.append(s[j - max_len:j])
+                        j = j + max_len
+                    if len(s[j - max_len:len(s)]) < 20:
+                        temp = ss[-1] + s[j - max_len:len(s)]
                         ss[-1] = temp[0:int(len(temp) / 2)]
                         ss.append(temp[int(len(temp) / 2):])
                     else:
-                        ss.append(s[j - 10:len(s)])
+                        ss.append(s[j - max_len:len(s)])
                     temp_sents.extend(ss)
 
                 else:
@@ -114,9 +176,9 @@ def get_sentences(content):
         else:
             temp_sents.append(sent)
 
-        # temp_sents获得了所有子句，将子句尽可能组成100长度得长句，减少训练时间
+        # temp_sents获得了所有子句，将子句尽可能组成max_len长度的长句，减少训练时间
         for temp in temp_sents:
-            if len(sentence + temp) <= 100:
+            if len(sentence + temp) <= max_len:
                 sentence = sentence + temp
             else:
                 res.append(sentence)
@@ -125,8 +187,14 @@ def get_sentences(content):
     if sentence != '':
         res.append(sentence)
 
-    return res
+    result = []
+    for r in res:
+        r = get_real_text(mask_texts, r)
+        r = r.replace('\n', '')
+        r = r.replace('\r', '')
+        result.append(r)
 
+    return result
 
 
 def seg_char(sent):
@@ -162,20 +230,61 @@ def get_core_entityemotions(entityemotions):
     results = []
     for ee in entityemotions:
         result = {}
-        result['entity'] = seg_char(ee['entity'])
+        result['entity'] = seg_char(clean_text(ee['entity']))
         result['emotion'] = ee['emotion']
         results.append(result)
 
     return results
 
 
+def ishan(char):
+    # for python 3.x
+    # sample: ishan('一') == True, ishan('我&&你') == False
+    return '\u4e00' <= char <= '\u9fff'
+
+
+def clean_text(text):
+    new_text = []
+    for char in text:
+        if ishan(char) or char in string.digits or char in string.ascii_letters or char in (
+                hanzi.punctuation + string.punctuation):
+            new_text.append(char)
+        elif char == '\t' or char == ' ':
+            new_text.append(' ')
+        elif char == '\r' or char == '\n':
+            new_text.append('\n')
+        else:
+            continue
+
+    new_text = ''.join(new_text)
+    # html转移字符
+    new_text = re.sub(r'&quot;', '"', new_text)
+    new_text = re.sub(r'&amp;', '&', new_text)
+    new_text = re.sub(r'&lt;', '<', new_text)
+    new_text = re.sub(r'&gt;', '>', new_text)
+    new_text = re.sub(r'&nbsp;', ' ', new_text)
+    new_text = re.sub(r'&middot;', '·', new_text)
+    # 去除多余空格
+    new_text = re.sub(r' +', ' ', new_text)
+    # 去除html链接
+    new_text = re.sub(
+        r'(http|ftp)s?://([^\u4e00-\u9fa5＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､\u3000、〃〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏﹑﹔·！？｡。])*',
+        '', new_text)
+    # 去除多余连续符号，比如颜文字表情
+    new_text = re.sub(r'[#%&\'()*+-./:;<=>?@[\]^_`{|}~]{2,}', '', new_text)
+
+    return new_text
+
+
 if __name__ == '__main__':
 
-    datas_process = pickle.load(open('new_data/coreEntityEmotion_example.pkl', 'rb'))
+    f = open('../data/coreEntityEmotion_example.txt', 'r')
     datas = []
     datas_em = []
-    all_index = len(datas_process)
-    for index, data in enumerate(datas_process):
+    all_index = len(f.readlines())
+    f.seek(0)
+    for index, line in enumerate(f.readlines()):
+        data = json.loads(line)
         print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data_em = {}
@@ -185,23 +294,24 @@ if __name__ == '__main__':
         new_data['coreEntityEmotions'] = get_core_entityemotions(data['coreEntityEmotions'])
         new_data_em['coreEntityEmotions'] = new_data['coreEntityEmotions']
 
-        if len(data['title']) > 125:
-            data['title'] = data['title'][:125]
+        title = clean_text(data['title'].strip())
+
+        if len(title) > 125:
+            title = title[:125]
             print('warning:标题被截断!!')
-        title = seg_char(data['title'])
+        title = seg_char(title)
         title_labels = get_label_no_emotion(title, new_data['coreEntityEmotions'])
         assert len(title) == len(title_labels)
         new_data['title'] = (title, title_labels)
         title_labels = get_label(title, new_data['coreEntityEmotions'])
         assert len(title) == len(title_labels)
         new_data_em['title'] = (title, title_labels)
-
-        if len(data['content']) == 0:
+        data['content'] = clean_text(data['content'].strip())
+        if len(data['content'].strip()) == 0:
             new_data['content'] = []
             new_data_em['content'] = []
             pass
         else:
-            data['content'] = data['content'].strip()
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
             sentences = get_sentences(data['content'])
@@ -221,14 +331,17 @@ if __name__ == '__main__':
         datas.append(new_data)
         datas_em.append(new_data_em)
 
-    data_dump(datas, 'new_data2/example_ner_no_emotion.pkl')
-    data_dump(datas_em, 'new_data2/example_ner_has_emotion.pkl')
+    f.close()
+    data_dump(datas, '../datasets/variable_data/example_ner_no_emotion.pkl')
+    data_dump(datas_em, '../datasets/variable_data/example_ner_has_emotion.pkl')
 
-    datas_process = pickle.load(open('new_data/coreEntityEmotion_train.pkl', 'rb'))
+    f = open('../data/coreEntityEmotion_train.txt', 'r')
     datas = []
     datas_em = []
-    all_index = len(datas_process)
-    for index, data in enumerate(datas_process):
+    all_index = len(f.readlines())
+    f.seek(0)
+    for index, line in enumerate(f.readlines()):
+        data = json.loads(line)
         print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data_em = {}
@@ -238,23 +351,24 @@ if __name__ == '__main__':
         new_data['coreEntityEmotions'] = get_core_entityemotions(data['coreEntityEmotions'])
         new_data_em['coreEntityEmotions'] = new_data['coreEntityEmotions']
 
-        if len(data['title']) > 125:
-            data['title'] = data['title'][:125]
+        title = clean_text(data['title'].strip())
+
+        if len(title) > 125:
+            title = title[:125]
             print('warning:标题被截断!!')
-        title = seg_char(data['title'])
+        title = seg_char(title)
         title_labels = get_label_no_emotion(title, new_data['coreEntityEmotions'])
         assert len(title) == len(title_labels)
         new_data['title'] = (title, title_labels)
         title_labels = get_label(title, new_data['coreEntityEmotions'])
         assert len(title) == len(title_labels)
         new_data_em['title'] = (title, title_labels)
-
-        if len(data['content']) == 0:
+        data['content'] = clean_text(data['content'].strip())
+        if len(data['content'].strip()) == 0:
             new_data['content'] = []
             new_data_em['content'] = []
             pass
         else:
-            data['content'] = data['content'].strip()
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
             sentences = get_sentences(data['content'])
@@ -274,27 +388,30 @@ if __name__ == '__main__':
         datas.append(new_data)
         datas_em.append(new_data_em)
 
-    data_dump(datas, 'new_data2/train_ner_no_emotion.pkl')
-    data_dump(datas_em, 'new_data2/train_ner_has_emotion.pkl')
+    f.close()
+    data_dump(datas, '../datasets/variable_data/train_ner_no_emotion.pkl')
+    data_dump(datas_em, '../datasets/variable_data/train_ner_has_emotion.pkl')
 
-
-    datas_process = pickle.load(open('new_data/coreEntityEmotion_test.pkl', 'rb'))
+    f = open('../data/coreEntityEmotion_test_stage2.txt', 'r')
     datas = []
-    all_index = len(datas_process)
-    for index, data in enumerate(datas_process):
+    all_index = len(f.readlines())
+    f.seek(0)
+    for index, line in enumerate(f.readlines()):
+        data = json.loads(line)
         print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data['newsId'] = data['newsId']
+
+        data['title'] = clean_text(data['title'].strip())
         if len(data['title']) > 125:
             data['title'] = data['title'][:125]
             print('warning:标题被截断!!')
         title = seg_char(data['title'])
         new_data['title'] = title
-
-        if len(data['content']) == 0:
+        data['content'] = clean_text(data['content'].strip())
+        if len(data['content'].strip()) == 0:
             new_data['content'] = []
         else:
-            data['content'] = data['content'].strip()
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
             sentences = get_sentences(data['content'])
@@ -306,5 +423,5 @@ if __name__ == '__main__':
 
         datas.append(new_data)
 
-    data_dump(datas, 'new_data2/test_ner.pkl')
-
+    f.close()
+    data_dump(datas, '../datasets/variable_data/test_ner2.pkl')

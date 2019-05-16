@@ -12,6 +12,8 @@ import string
 import json
 import random
 
+cut_num = 0
+
 
 def Unicode():
     val = random.randint(0x4e00, 0x9fbf)
@@ -135,6 +137,7 @@ def get_real_text(mask_texts, text):
 
 
 def get_sentences(content):
+    global cut_num
     # mask一写书名号等
     mask_texts, content = get_entity_mask(content)
 
@@ -147,24 +150,26 @@ def get_sentences(content):
         new_sents.append(sent)
     res = []
     sentence = ''
+    max_len = 100
     for sent in new_sents:
         temp_sents = []
-        if len(sent) > 100:  # 大于100长度继续分，；|、|,|，|﹔|､，6个次级分句
+        if len(sent) > max_len:  # 大于max_len长度继续分，；|、|,|，|﹔|､，6个次级分句
             sents = re.split(r'(；|、|,|，|﹔|､)', sent)  # 保留分割符
             for s in sents:
-                if len(s) > 100:  # 子分句也大于100，采用截断式分句
+                if len(s) > max_len:  # 子分句也大于max_len，采用截断式分句
+                    cut_num = cut_num + 1
                     s = get_real_text(mask_texts, s)  # 还原mask
                     ss = []
-                    j = 100
+                    j = max_len
                     while j < len(s):
-                        ss.append(s[j - 100:j])
-                        j = j + 100
-                    if len(s[j - 100:len(s)]) < 20:
-                        temp = ss[-1] + s[j - 100:len(s)]
+                        ss.append(s[j - max_len:j])
+                        j = j + max_len
+                    if len(s[j - max_len:len(s)]) < 20:
+                        temp = ss[-1] + s[j - max_len:len(s)]
                         ss[-1] = temp[0:int(len(temp) / 2)]
                         ss.append(temp[int(len(temp) / 2):])
                     else:
-                        ss.append(s[j - 100:len(s)])
+                        ss.append(s[j - max_len:len(s)])
                     temp_sents.extend(ss)
 
                 else:
@@ -172,9 +177,9 @@ def get_sentences(content):
         else:
             temp_sents.append(sent)
 
-        # temp_sents获得了所有子句，将子句尽可能组成100长度得长句，减少训练时间
+        # temp_sents获得了所有子句，将子句尽可能组成max_len长度的长句，减少训练时间
         for temp in temp_sents:
-            if len(sentence + temp) <= 100:
+            if len(sentence + temp) <= max_len:
                 sentence = sentence + temp
             else:
                 res.append(sentence)
@@ -186,7 +191,7 @@ def get_sentences(content):
     result = []
     for r in res:
         r = get_real_text(mask_texts, r)
-        r = r.replace('\n','')
+        r = r.replace('\n', '')
         r = r.replace('\r', '')
         result.append(r)
 
@@ -273,7 +278,6 @@ def clean_text(text):
 
 
 if __name__ == '__main__':
-
     f = open('../data/coreEntityEmotion_example.txt', 'r')
     datas = []
     datas_em = []
@@ -421,3 +425,5 @@ if __name__ == '__main__':
 
     f.close()
     data_dump(datas, '../datasets/test_ner2.pkl')
+
+    print('截断总数{}'.format(cut_num))
