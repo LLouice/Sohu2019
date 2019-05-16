@@ -211,8 +211,9 @@ def train():
         cpe5 = CustomPeriodicEvent(n_epochs=5)
         cpe5.attach(trainer)
     '''
-    eval(f"cpe{args.eval_step} = CustomPeriodicEvent(n_iterations={args.eval_step})")
-    eval(f"cpe{args.eval_step}.attach(trainer)")
+    if args.eval_step > 0:
+        cpe = CustomPeriodicEvent(n_iterations=args.eval_step)
+        cpe.attach(trainer)
 
     ############################## My F1 ###################################
     F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]])
@@ -258,7 +259,8 @@ def train():
                 .format(engine.state.iteration, f1))
         pbar.n = pbar.last_print_n = 0
 
-    trainer.add_event_handler(eval(f"cpe{args.eval_step}.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
+    if args.eval_step > 0:
+        trainer.add_event_handler(eval(f"cpe.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
                               compute_val_metric_iteration)
 
     @val_evaluator.on(Events.EPOCH_COMPLETED)
@@ -296,7 +298,8 @@ def train():
     #                           to_save={'model_3FC': model})
     val_evaluator.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
                                     to_save={'model_title': model})
-    val_evaluator_iteration.add_event_handler(event_name=eval(f"cpe{args.eval_step}.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
+    if args.eval_step > 0:
+        val_evaluator_iteration.add_event_handler(event_name=eval(f"cpe.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
                                               handler=checkpoint_handler, to_save={"model_iter": model})
 
     ######################################################################
@@ -432,7 +435,7 @@ if __name__ == '__main__':
                         help="multi alpha or not")
     parser.add_argument("--eval_step",
                         type=int,
-                        default=200000000,
+                        default=-1,
                         help="the step to val")
 
     args = parser.parse_args()
