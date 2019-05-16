@@ -160,11 +160,11 @@ def get_sentences(content):
                         ss.append(s[j - 100:j])
                         j = j + 100
                     if len(s[j - 100:len(s)]) < 20:
-                        temp = ss[-1] + s[j - 10:len(s)]
+                        temp = ss[-1] + s[j - 100:len(s)]
                         ss[-1] = temp[0:int(len(temp) / 2)]
                         ss.append(temp[int(len(temp) / 2):])
                     else:
-                        ss.append(s[j - 10:len(s)])
+                        ss.append(s[j - 100:len(s)])
                     temp_sents.extend(ss)
 
                 else:
