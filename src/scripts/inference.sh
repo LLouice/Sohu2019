@@ -12,7 +12,7 @@ test(){
     python -u test.py \
         --test_batch_size=${test_batch_size} \
         --best_model=${best_model} \
-    --pred=${pred}
+        --pred=${pred}
 }
 
 
