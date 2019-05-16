@@ -121,9 +121,9 @@ def run(test_dataloader, cv):
 
     # ++++++++++++++++++++++++++++++++++ Test +++++++++++++++++++++++++++++++++
     if cv == 1:
-        f = h5py.File(f"../preds/pred_5cv.h5", "w")
+        f = h5py.File(f"../preds/{args.pred}", "w")
     else:
-        f = h5py.File(f"../preds/pred_5cv.h5", "r+")
+        f = h5py.File(f"../preds/{args.pred}", "r+")
     ent_raw = f.create_dataset(f"cv{cv}/ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
     emo_raw = f.create_dataset(f"cv{cv}/emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
 
