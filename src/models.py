@@ -560,10 +560,14 @@ class NetX3_fz(BertPreTrainedModel):
         print("model freeze over!")
 
     def unfreeze(self):
+        freeze_paras = []
         for idx, (n, m) in enumerate(self.bert.named_modules()):
             for p in m.parameters():
-                p.requires_grad = True
+                if not p.requires_grad:
+                    p.requires_grad = True
+                    freeze_paras.append(p)
         print("unfreeze over")
+        return freeze_paras
 
     def forward(self, input_ids, myinput_ids=None, token_type_ids=None, attention_mask=None, labels_ent=None,
                 labels_emo=None):

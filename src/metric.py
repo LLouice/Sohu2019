@@ -80,7 +80,7 @@ class FScore(Metric):
         return 0.5 * (f1_ent_all + f1_emo_all)
 
     def _find_ents(self, y_pred_ent,y_pred_emo, p, tokens, S, mode="lbl"):
-        # TODO 使用与取result一致的逻辑
+        # 使用与取result一致的逻辑
         for r in p.finditer(y_pred_ent):
             i, j = r.span()[0], r.span()[1]
             res = "".join(tokens[i:j])

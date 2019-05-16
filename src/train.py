@@ -19,7 +19,7 @@ from ignite.metrics import RunningAverage
 from ignite.contrib.handlers.tensorboard_logger import *
 from metric import FScore
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
-from models import NetX3
+from models import NetX3, NetX3_fz
 from loss import FocalLoss
 
 
@@ -77,11 +77,18 @@ def train():
     num_labels_emo = 4  # O POS NEG NORM
     num_labels_ent = 3  # O B I
 
-    model = NetX3.from_pretrained(args.bert_model,
-                                  cache_dir="",
-                                  num_labels_ent=num_labels_ent,
-                                  num_labels_emo=num_labels_emo,
-                                  dp=args.dp)
+    if not args.freeze > 0:
+        model = NetX3.from_pretrained(args.bert_model,
+                                      cache_dir="",
+                                      num_labels_ent=num_labels_ent,
+                                      num_labels_emo=num_labels_emo,
+                                      dp=args.dp)
+    else:
+        model = NetX3_fz.from_pretrained(args.bert_model,
+                                         cache_dir="",
+                                         num_labels_ent=num_labels_ent,
+                                         num_labels_emo=num_labels_emo,
+                                         dp=args.dp)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -110,6 +117,11 @@ def train():
 
     trn_dataloader, val_dataloader, trn_size = get_data_loader()
 
+    ############################## Freeze First ###################################
+    # TODO freeze
+    if args.freeze_step > 0:
+        model.freeze()
+        print("freezed model")
     ############################## Optimizer ###################################
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -132,6 +144,11 @@ def train():
         criterion = FocalLoss(args.gamma)
 
     def step(engine, batch):
+        if args.freeze_step > 0:
+            if engine.state.epoch == args.freeze_step:
+                freeze_paras = model.unfreeze()
+                # opt unfreeze
+                optimizer.add_param_group({'params': freeze_paras})
         model.train()
         batch = tuple(t.to(device) for t in batch)
         input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
@@ -261,7 +278,7 @@ def train():
 
     if args.eval_step > 0:
         trainer.add_event_handler(eval(f"cpe.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
-                              compute_val_metric_iteration)
+                                  compute_val_metric_iteration)
 
     @val_evaluator.on(Events.EPOCH_COMPLETED)
     def reduct_step(engine):
@@ -299,8 +316,8 @@ def train():
     val_evaluator.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
                                     to_save={'model_title': model})
     if args.eval_step > 0:
-        val_evaluator_iteration.add_event_handler(event_name=eval(f"cpe.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
-                                              handler=checkpoint_handler, to_save={"model_iter": model})
+        val_evaluator_iteration.add_event_handler(event_name=Events.EPOCH_COMPLETED,
+                                                  handler=checkpoint_handler, to_save={"model_iter": model})
 
     ######################################################################
 
@@ -346,11 +363,12 @@ def train():
                                                another_engine=trainer),
                      event_name=Events.EPOCH_COMPLETED)
 
-    tb_logger.attach(val_evaluator_iteration,
-                     log_handler=OutputHandler(tag="validation_iteration",
-                                               metric_names=["F1"],
-                                               another_engine=trainer),
-                     event_name=Events.EPOCH_COMPLETED)
+    if args.eval_step > 0:
+        tb_logger.attach(val_evaluator_iteration,
+                         log_handler=OutputHandler(tag="validation_iteration",
+                                                   metric_names=["F1"],
+                                                   another_engine=trainer),
+                         event_name=Events.EPOCH_COMPLETED)
 
     tb_logger.attach(trainer,
                      log_handler=OptimizerParamsHandler(optimizer, "lr"),
@@ -433,6 +451,10 @@ if __name__ == '__main__':
     parser.add_argument("--multi",
                         action="store_true",
                         help="multi alpha or not")
+    parser.add_argument("--freeze_step",
+                        type=int,
+                        default=-1,
+                        help="freeze bert")
     parser.add_argument("--eval_step",
                         type=int,
                         default=-1,
