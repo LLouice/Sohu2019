@@ -120,10 +120,10 @@ def run(test_dataloader, cv):
     pbar_test.attach(tester)
 
     # ++++++++++++++++++++++++++++++++++ Test +++++++++++++++++++++++++++++++++
-    if cv ==1:
-        f = h5py.File(f"../preds/pred_5cv.h5", "w")
+    if cv == 1:
+        f = h5py.File(f"../preds/{args.pred}", "w")
     else:
-        f = h5py.File(f"../preds/pred_5cv.h5", "r+")
+        f = h5py.File(f"../preds/{args.pred}", "r+")
     ent_raw = f.create_dataset(f"cv{cv}/ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
     emo_raw = f.create_dataset(f"cv{cv}/emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
 
@@ -155,6 +155,8 @@ def run(test_dataloader, cv):
             if engine.state.metrics.get("preds_ent") is None:
                 engine.state.metrics["preds_ent"] = []
                 engine.state.metrics["preds_emo"] = []
+                engine.state.metrics["preds_ent"].append(pred_ent_raw.cpu())
+                engine.state.metrics["preds_emo"].append(pred_emo_raw.cpu())
             else:
                 engine.state.metrics["preds_ent"].append(pred_ent_raw.cpu())
                 engine.state.metrics["preds_emo"].append(pred_emo_raw.cpu())
@@ -163,9 +165,15 @@ def run(test_dataloader, cv):
 
     @tester.on(Events.EPOCH_COMPLETED)
     def save_and_close(engine):
-        if engine.state.get("preds_ent") is None:
-            ent_raw[:] = torch.cat(engine.state.metrics["preds_ent"], dim=0)
-            emo_raw[:] = torch.cat(engine.state.metrics["preds_emo"], dim=0)
+        if engine.state.metrics.get("preds_ent") is not None:
+            preds_ent = torch.cat(engine.state.metrics["preds_ent"], dim=0)
+            preds_emo = torch.cat(engine.state.metrics["preds_emo"], dim=0)
+            assert preds_ent.size(0) == preds_emo.size(0)
+            ent_raw.resize(preds_ent.size(0), axis=0)
+            emo_raw.resize(preds_emo.size(0), axis=0)
+            ent_raw[...] = preds_ent
+            emo_raw[...] = preds_emo
+            print("pred size: ", ent_raw.shape)
         f.close()
         print("test over")
 
