@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -eux
+src=$(pwd)/..
+export PYTHONPATH=:${src}
 export CUDA_VISIBLE_DEVICES=0,1
 
-cd ../kflod
-bs=128
-val_bs=128
-test_bs=2000
+cd ../kfold
+bs=124
+val_bs=150
+test_bs=2880
 pred="pred_5cv.h5"
 pred_avg="pred_avg.h5"
 
@@ -30,6 +32,9 @@ avg(){
            --pred_avg=${pred_avg}
 }
 
+train
+test
+avg
 
 
 
