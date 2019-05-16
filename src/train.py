@@ -77,7 +77,7 @@ def train():
     num_labels_emo = 4  # O POS NEG NORM
     num_labels_ent = 3  # O B I
 
-    if not args.freeze > 0:
+    if not args.freeze_step > 0:
         model = NetX3.from_pretrained(args.bert_model,
                                       cache_dir="",
                                       num_labels_ent=num_labels_ent,
