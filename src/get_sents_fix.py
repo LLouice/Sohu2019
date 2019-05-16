@@ -10,7 +10,16 @@ import pickle
 from zhon import hanzi
 import string
 import json
-import html
+import random
+
+
+def Unicode():
+    val = random.randint(0x4e00, 0x9fbf)
+    return chr(val)
+
+
+def hash_ch(len_text):
+    return ''.join([Unicode() for _ in range(len_text)])
 
 
 def data_dump(data, file):
@@ -83,7 +92,52 @@ def get_label_no_emotion(sent, entity):
     return ner
 
 
+symbol_list = [('【', '】'), ('（', '）'), ('“', '”'), ('「', '」'), ('《', '》')]
+
+
+def get_entity_mask(text):
+    pattern = r'{}[^{}\n\r]+{}'
+    pattern2 = r'{}[^{}。｡！!？?\n\r]+{}'
+
+    mask_texts_set = set()
+    for symbol in symbol_list:
+        symbol1 = symbol[0]
+        symbol2 = symbol[1]
+        if symbol1 == '“':
+            res = re.findall(pattern2.format(symbol1, symbol2, symbol2), text)
+        else:
+            res = re.findall(pattern.format(symbol1, symbol2, symbol2), text)
+        for r in res:
+            mask_texts_set.add(r)
+
+    mask_texts_set = list(mask_texts_set)
+    mask_texts_set.sort(key=lambda x: len(x), reverse=True)
+    mask_texts = []
+    for t in mask_texts_set:
+        lent = len(t)
+        while True:
+            h = str(hash_ch(lent))
+            if h not in text:
+                break
+        assert len(t) == len(h)
+        mask_texts.append((t, h))
+
+    for t, h in mask_texts:
+        text = text.replace(t, h)
+
+    return mask_texts, text
+
+
+def get_real_text(mask_texts, text):
+    for t, h in mask_texts:
+        text = text.replace(h, t)
+    return text
+
+
 def get_sentences(content):
+    # mask一写书名号等
+    mask_texts, content = get_entity_mask(content)
+
     # 基本分句，。|｡|！|\!|？|\?，用这6个符号分
     sentences = re.split(r'(。|｡|！|\!|？|\?)', content)  # 保留分割符
     new_sents = []
@@ -99,6 +153,7 @@ def get_sentences(content):
             sents = re.split(r'(；|、|,|，|﹔|､)', sent)  # 保留分割符
             for s in sents:
                 if len(s) > 100:  # 子分句也大于100，采用截断式分句
+                    s = get_real_text(mask_texts, s)  # 还原mask
                     ss = []
                     j = 100
                     while j < len(s):
@@ -128,7 +183,14 @@ def get_sentences(content):
     if sentence != '':
         res.append(sentence)
 
-    return res
+    result = []
+    for r in res:
+        r = get_real_text(mask_texts, r)
+        r = r.replace('\n','')
+        r = r.replace('\r', '')
+        result.append(r)
+
+    return result
 
 
 def seg_char(sent):
@@ -180,20 +242,32 @@ def ishan(char):
 def clean_text(text):
     new_text = []
     for char in text:
-        if ishan(char) or char in string.digits or char in string.ascii_letters or char in (hanzi.punctuation + string.punctuation):
+        if ishan(char) or char in string.digits or char in string.ascii_letters or char in (
+                hanzi.punctuation + string.punctuation):
             new_text.append(char)
         elif char == '\t' or char == ' ':
             new_text.append(' ')
+        elif char == '\r' or char == '\n':
+            new_text.append('\n')
         else:
             continue
 
     new_text = ''.join(new_text)
+    # html转移字符
+    new_text = re.sub(r'&quot;', '"', new_text)
+    new_text = re.sub(r'&amp;', '&', new_text)
+    new_text = re.sub(r'&lt;', '<', new_text)
+    new_text = re.sub(r'&gt;', '>', new_text)
+    new_text = re.sub(r'&nbsp;', ' ', new_text)
+    new_text = re.sub(r'&middot;', '·', new_text)
+    # 去除多余空格
     new_text = re.sub(r' +', ' ', new_text)
-    new_text = html.unescape(new_text)
+    # 去除html链接
     new_text = re.sub(
         r'(http|ftp)s?://([^\u4e00-\u9fa5＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､\u3000、〃〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏﹑﹔·！？｡。])*',
         '', new_text)
-    new_text = re.sub(r'[!"#%&\'()*+-./:;<=>?@[\]^_`{|}~]{2,}', '', new_text)
+    # 去除多余连续符号，比如颜文字表情
+    new_text = re.sub(r'[#%&\'()*+-./:;<=>?@[\]^_`{|}~]{2,}', '', new_text)
 
     return new_text
 
