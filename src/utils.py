@@ -91,3 +91,27 @@ def covert_myids_to_mytokens(ID2TOK, myids):
     for i in myids:
         mytokens.append(ID2TOK[i])
     return mytokens
+
+
+#####################################check sent_len############################
+def check_sent_len():
+    sent_lens = dict()
+    for fname in ['../data/coreEntityEmotion_test_stage2.txt','../data/coreEntityEmotion_train.txt',
+                  '../data/coreEntityEmotion_example.txt']:
+        f = open(fname, 'r')
+        f.seek(0)
+        for index, line in enumerate(f.readlines()):
+            data = json.loads(line)
+            title = data['title']
+            content = data['content']
+            if sent_lens.get(len(title)):
+                sent_lens[len(title)] = sent_lens[len(title)] + 1
+            else:
+                sent_lens[len(title)] = 1
+            for sent in get_sentences(content):
+                if sent_lens.get(len(sent)):
+                    sent_lens[len(sent)] = sent_lens[len(sent)] + 1
+                else:
+                    sent_lens[len(sent)] = 1
+
+    return sent_lens
