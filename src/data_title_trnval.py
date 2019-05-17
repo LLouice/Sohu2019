@@ -81,13 +81,12 @@ def readfile(filename):
                     # 第二个空行 sentence 已空
                     has_title = False
                     count += 1
+                    if count % 50000 == 0:
+                        print(count)
                 continue
             splits = line.split(' ')
             sentence.append(splits[0])
             label_sent.append(splits[-1][:-1])
-
-            if count % 100 == 0:
-                print(count)
 
         # 防止因最后一行非空行而没加入最后一个
         if len(sentence) > 0:
@@ -285,7 +284,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                                 if mytok not in TOK2ID:
                                     TOK2ID[mytok] = len(TOK2ID)
                 if SAMESPLIT:
-                    print(f"guid: {example.guid}, title: {example.text_title}",word, token, mytoken, sep="\t")
+                    print(f"guid: {example.guid}, title: {example.text_title}", word, token, mytoken, sep="\t")
                 tokens.extend(token)
                 mytokens.extend(mytoken)
                 assert len(tokens) == len(mytokens)
@@ -424,7 +423,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                           label_ent_ids=label_ent_ids,
                           label_emo_ids=label_emo_ids))
         count += 1
-        if count % 10000 == 0:
+        if count % 20000 == 0:
             print("gen example {} feature".format(count))
 
     logger.info("finish features gen")

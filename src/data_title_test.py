@@ -81,11 +81,11 @@ def readfile(filename):
                     has_title = False
                     ID += 1
                     count += 1
+                    if count % 50000 == 0:
+                        print(count)
                 continue
             sentence.append(line[:-1])
 
-            if count % 100 == 0:
-                print(count)
 
         # 防止因最后一行非空行而没加入最后一个
         if len(sentence) > 0:
@@ -324,7 +324,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                           input_mask=input_mask,
                           segment_ids=segment_ids))
         count += 1
-        if count % 10000 == 0:
+        if count % 20000 == 0:
             print("gen example {} feature".format(count))
 
     logger.info("finish features gen")
@@ -401,6 +401,8 @@ def main():
     all_input_mask = torch.tensor([f.input_mask for f in test_features], dtype=torch.long)
 
     f = h5py.File("../datasets/full.h5", "r+", libver="latest")
+    # for add again del first
+    del f["test"]
     f.create_dataset("test/IDs", data=all_IDs, compression="gzip")
     f.create_dataset("test/input_ids", data=all_input_ids, compression="gzip")
     f.create_dataset("test/myinput_ids", data=all_myinput_ids, compression="gzip")
