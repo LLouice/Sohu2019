@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Time    : 2019/5/15 19:20
+# @Time    : 2019/5/15 19:25
 # @Author  : 邵明岩
-# @File    : get_sents_fix.py
+# @File    : get_sents.py
 # @Software: PyCharm
 
 import re
@@ -11,8 +11,6 @@ from zhon import hanzi
 import string
 import json
 import random
-
-cut_num = 0
 
 
 def Unicode():
@@ -136,8 +134,10 @@ def get_real_text(mask_texts, text):
     return text
 
 
+# 虽然是可变长的batch要的数据，但是过长的句子也是不可行的，这里
+# 最长用600，仅占2912458个句子中的938条
+
 def get_sentences(content):
-    global cut_num
     # mask一写书名号等
     mask_texts, content = get_entity_mask(content)
 
@@ -150,14 +150,13 @@ def get_sentences(content):
         new_sents.append(sent)
     res = []
     sentence = ''
-    max_len = 100
+    max_len = 600
     for sent in new_sents:
         temp_sents = []
         if len(sent) > max_len:  # 大于max_len长度继续分，；|、|,|，|﹔|､，6个次级分句
             sents = re.split(r'(；|、|,|，|﹔|､)', sent)  # 保留分割符
             for s in sents:
                 if len(s) > max_len:  # 子分句也大于max_len，采用截断式分句
-                    cut_num = cut_num + 1
                     s = get_real_text(mask_texts, s)  # 还原mask
                     ss = []
                     j = max_len
@@ -278,6 +277,7 @@ def clean_text(text):
 
 
 if __name__ == '__main__':
+
     f = open('../data/coreEntityEmotion_example.txt', 'r')
     datas = []
     datas_em = []
@@ -332,8 +332,8 @@ if __name__ == '__main__':
         datas_em.append(new_data_em)
 
     f.close()
-    data_dump(datas, '../datasets/example_ner_no_emotion.pkl')
-    data_dump(datas_em, '../datasets/example_ner_has_emotion.pkl')
+    data_dump(datas, '../datasets/variable_data/example_ner_no_emotion.pkl')
+    data_dump(datas_em, '../datasets/variable_data/example_ner_has_emotion.pkl')
 
     f = open('../data/coreEntityEmotion_train.txt', 'r')
     datas = []
@@ -389,8 +389,8 @@ if __name__ == '__main__':
         datas_em.append(new_data_em)
 
     f.close()
-    data_dump(datas, '../datasets/train_ner_no_emotion.pkl')
-    data_dump(datas_em, '../datasets/train_ner_has_emotion.pkl')
+    data_dump(datas, '../datasets/variable_data/train_ner_no_emotion.pkl')
+    data_dump(datas_em, '../datasets/variable_data/train_ner_has_emotion.pkl')
 
     f = open('../data/coreEntityEmotion_test_stage2.txt', 'r')
     datas = []
@@ -424,6 +424,4 @@ if __name__ == '__main__':
         datas.append(new_data)
 
     f.close()
-    data_dump(datas, '../datasets/test_ner2.pkl')
-
-    print('截断总数{}'.format(cut_num))
+    data_dump(datas, '../datasets/variable_data/test_ner2.pkl')
