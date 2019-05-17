@@ -89,6 +89,9 @@ def train():
                                          num_labels_ent=num_labels_ent,
                                          num_labels_emo=num_labels_emo,
                                          dp=args.dp)
+        ########################### Freeze First ###################################
+        model.freeze()
+        print("freezed model")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -117,11 +120,6 @@ def train():
 
     trn_dataloader, val_dataloader, trn_size = get_data_loader()
 
-    ############################## Freeze First ###################################
-    # TODO freeze
-    if args.freeze_step > 0:
-        model.freeze()
-        print("freezed model")
     ############################## Optimizer ###################################
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -145,10 +143,12 @@ def train():
 
     def step(engine, batch):
         if args.freeze_step > 0:
-            if engine.state.epoch == args.freeze_step:
-                freeze_paras = model.unfreeze()
+            if engine.state.epoch-1 == args.freeze_step:
+                freeze_paras = model.module.unfreeze()
                 # opt unfreeze
                 optimizer.add_param_group({'params': freeze_paras})
+                # run only once
+                args.freeze_step = -1
         model.train()
         batch = tuple(t.to(device) for t in batch)
         input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
