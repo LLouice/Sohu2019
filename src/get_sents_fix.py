@@ -223,7 +223,11 @@ def seg_char(sent):
 
 
 def seg_char_sents(sentences):
-    results = [seg_char(sent) for sent in sentences]
+    results = []
+    for sent in sentences:
+        res = seg_char(sent)
+        if len(res) > 0:
+            results.append(res)
     return results
 
 
