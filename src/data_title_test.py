@@ -402,7 +402,8 @@ def main():
 
     f = h5py.File("../datasets/full.h5", "r+", libver="latest")
     # for add again del first
-    del f["test"]
+    if "test" in f.keys():
+        del f["test"]
     f.create_dataset("test/IDs", data=all_IDs, compression="gzip")
     f.create_dataset("test/input_ids", data=all_input_ids, compression="gzip")
     f.create_dataset("test/myinput_ids", data=all_myinput_ids, compression="gzip")
