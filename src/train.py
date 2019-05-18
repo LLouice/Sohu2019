@@ -77,7 +77,7 @@ def train():
     num_labels_emo = 4  # O POS NEG NORM
     num_labels_ent = 3  # O B I
 
-    if not args.freeze > 0:
+    if not args.freeze_step > 0:
         model = NetX3.from_pretrained(args.bert_model,
                                       cache_dir="",
                                       num_labels_ent=num_labels_ent,
@@ -166,16 +166,17 @@ def train():
             loss = alpha * loss_ent + loss_emo
         else:
             loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
-
         if engine.state.metrics.get("total_loss") is None:
-            engine.state.metrics["total_loss"] = 0
-            engine.state.metrics["ent_loss"] = 0
-            engine.state.metrics["emo_loss"] = 0
+            engine.state.metrics["total_loss"] = loss.item()
+            engine.state.metrics["ent_loss"] = loss_ent.item()
+            engine.state.metrics["emo_loss"] = loss_emo.item()
         else:
             engine.state.metrics["total_loss"] += loss.item()
             engine.state.metrics["ent_loss"] += loss_ent.item()
-            engine.state.metrics["emo_loss"] += loss_emo.item() if act_logits_emo.size(0) > 0 else 0
-
+            engine.state.metrics["emo_loss"] += loss_emo.item()
+        engine.state.metrics["batchloss"] = loss.item()
+        engine.state.metrics["batchloss_ent"] = loss_ent.item()
+        engine.state.metrics["batchloss_emo"] = loss_emo.item()
         loss.backward()
         optimizer.step()
         return loss.item(), act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids  # [-1, 11]
@@ -201,13 +202,16 @@ def train():
                 loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
 
             if engine.state.metrics.get("total_loss") is None:
-                engine.state.metrics["total_loss"] = 0
-                engine.state.metrics["ent_loss"] = 0
-                engine.state.metrics["emo_loss"] = 0 if loss_emo else 0
+                engine.state.metrics["total_loss"] = loss.item()
+                engine.state.metrics["ent_loss"] = loss_ent.item()
+                engine.state.metrics["emo_loss"] = loss_emo.item()
             else:
                 engine.state.metrics["total_loss"] += loss.item()
                 engine.state.metrics["ent_loss"] += loss_ent.item()
-                engine.state.metrics["emo_loss"] += loss_emo.item() if act_logits_emo.size(0) > 0 else 0
+                engine.state.metrics["emo_loss"] += loss_emo.item()
+            engine.state.metrics["batchloss"] = loss.item()
+            engine.state.metrics["batchloss_ent"] = loss_ent.item()
+            engine.state.metrics["batchloss_emo"] = loss_emo.item()
         # act_logits = torch.argmax(torch.softmax(act_logits, dim=-1), dim=-1)  # [-1, 1]
         # loss = loss.mean()
         return loss.item(), act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, mask_logits_emo, mask_y_emo, act_myinput_ids  # [-1, 11]
@@ -334,6 +338,7 @@ def train():
     else:
         tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "lite", args.hyper_cfg))
 
+    '''
     tb_logger.attach(trainer,
                      log_handler=OutputHandler(tag="training", output_transform=lambda x: {'batchloss': x[0]}),
                      event_name=Events.ITERATION_COMPLETED)
@@ -341,7 +346,14 @@ def train():
     tb_logger.attach(val_evaluator,
                      log_handler=OutputHandler(tag="validation", output_transform=lambda x: {'batchloss': x[0]}),
                      event_name=Events.ITERATION_COMPLETED)
+    '''
+    tb_logger.attach(trainer,
+                     log_handler=OutputHandler(tag="training", metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
+                     event_name=Events.ITERATION_COMPLETED)
 
+    tb_logger.attach(val_evaluator,
+                     log_handler=OutputHandler(tag="validation", metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
+                     event_name=Events.ITERATION_COMPLETED)
     tb_logger.attach(trainer,
                      log_handler=OutputHandler(tag="training", metric_names=["total_loss", "ent_loss", "emo_loss"]),
                      event_name=Events.EPOCH_COMPLETED)

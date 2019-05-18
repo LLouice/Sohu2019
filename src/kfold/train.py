@@ -77,7 +77,7 @@ def get_data_loader(dataset, cv):
         val_dataset = [dataset[idx] for idx in val_index]
     else:
         print("Not find index file!")
-        exit(0)
+        os._exit(-1)
     # ---------------------------------------------------------------------
     trn_dataloader = DataLoader(trn_dataset, sampler=RandomSampler(trn_dataset), batch_size=args.batch_size,
                                 num_workers=args.nw, pin_memory=True)

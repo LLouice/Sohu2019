@@ -157,6 +157,7 @@ def main():
         ents = []
         emos = []
         for ent, emo in R.items():
+            ent = ent.replace(",", "")
             ents.append(ent)
             emos.append(EMOS_MAP[emo])
 
