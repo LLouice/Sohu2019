@@ -149,7 +149,6 @@ def get_sentences(content):
         sent = sent.strip()
         new_sents.append(sent)
     res = []
-    sentence = ''
     max_len = 600
     for sent in new_sents:
         temp_sents = []
@@ -176,16 +175,7 @@ def get_sentences(content):
         else:
             temp_sents.append(sent)
 
-        # temp_sents获得了所有子句，将子句尽可能组成max_len长度的长句，减少训练时间
-        for temp in temp_sents:
-            if len(sentence + temp) <= max_len:
-                sentence = sentence + temp
-            else:
-                res.append(sentence)
-                sentence = temp
-
-    if sentence != '':
-        res.append(sentence)
+        res.extend(temp_sents)
 
     result = []
     for r in res:
@@ -222,7 +212,11 @@ def seg_char(sent):
 
 
 def seg_char_sents(sentences):
-    results = [seg_char(sent) for sent in sentences]
+    results = []
+    for sent in sentences:
+        res = seg_char(sent)
+        if len(res) > 0:
+            results.append(res)
     return results
 
 

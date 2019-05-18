@@ -314,24 +314,28 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                         else:
                             labels.append("I-NORM")
                     else:
+                        # 其它 I E
                         if lbl_method == "BIO":
                             labels.append(label_1)
                         else:
-                            if label_1 == "E-POS":
-                                if m < len(token) - 1:
-                                    labels.append("I-POS")
-                                else:
-                                    labels.append("E-POS")
-                            if label_1 == "E-NEG":
-                                if m < len(token) - 1:
-                                    labels.append("I-NEG")
-                                else:
-                                    labels.append("E-NEG")
-                            if label_1 == "E-NORM":
-                                if m < len(token) - 1:
-                                    labels.append("I-NORM")
-                                else:
-                                    labels.append("E-NORM")
+                            if len(token) >1 and label_1[0] == "E":
+                                if label_1 == "E-POS":
+                                    if m < len(token) - 1:
+                                        labels.append("I-POS")
+                                    else:
+                                        labels.append("E-POS")
+                                if label_1 == "E-NEG":
+                                    if m < len(token) - 1:
+                                        labels.append("I-NEG")
+                                    else:
+                                        labels.append("E-NEG")
+                                if label_1 == "E-NORM":
+                                    if m < len(token) - 1:
+                                        labels.append("I-NORM")
+                                    else:
+                                        labels.append("E-NORM")
+                            else:
+                                labels.append(label_1)
 
         _tokenize(textlist_A, labellist_A, tokens_A, mytokens_A, labels_A)
         _tokenize(textlist_B, labellist_B, tokens_B, mytokens_B, labels_B)
