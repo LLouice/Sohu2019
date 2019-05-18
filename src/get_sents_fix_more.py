@@ -47,7 +47,7 @@ def get_label(sent, entity):
             if a == name:
                 flag = False
                 for r in range(e_n):
-                    if ner[r + i].startswith('B') or ner[r + i].startswith('I'):
+                    if ner[r + i].startswith('B') or ner[r + i].startswith('I') or ner[r + i].startswith('E'):
                         flag = True
                         break
 
@@ -57,6 +57,8 @@ def get_label(sent, entity):
                     for r in range(e_n):
                         if r == 0:
                             ner[r + i] = 'B-{}'.format(emotion)
+                        elif r == e_n - 1:
+                            ner[r + i] = 'E-{}'.format(emotion)
                         else:
                             ner[r + i] = 'I-{}'.format(emotion)
     return ner
@@ -78,7 +80,7 @@ def get_label_no_emotion(sent, entity):
             if a == name:
                 flag = False
                 for r in range(e_n):
-                    if ner[r + i].startswith('B') or ner[r + i].startswith('I'):
+                    if ner[r + i].startswith('B') or ner[r + i].startswith('I') or ner[r + i].startswith('E'):
                         flag = True
                         break
 
@@ -88,6 +90,8 @@ def get_label_no_emotion(sent, entity):
                     for r in range(e_n):
                         if r == 0:
                             ner[r + i] = 'B'
+                        elif r == e_n - 1:
+                            ner[r + i] = 'E'
                         else:
                             ner[r + i] = 'I'
 
@@ -136,7 +140,7 @@ def get_real_text(mask_texts, text):
     return text
 
 
-def get_sentences(content):
+def get_sentences(content, title_len):
     global cut_num
     # mask一些书名号等
     mask_texts, content = get_entity_mask(content)
@@ -150,7 +154,7 @@ def get_sentences(content):
         new_sents.append(sent)
     res = []
     sentence = ''
-    max_len = 100
+    max_len = 250 - title_len
     for sent in new_sents:
         temp_sents = []
         if len(sent) > max_len:  # 大于max_len长度继续分，；|、|,|，|﹔|､，6个次级分句
@@ -289,7 +293,8 @@ if __name__ == '__main__':
     f.seek(0)
     for index, line in enumerate(f.readlines()):
         data = json.loads(line)
-        print('{}/{}'.format(index, all_index))
+        if index % 100 == 0:
+            print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data_em = {}
         new_data['newsId'] = data['newsId']
@@ -318,7 +323,7 @@ if __name__ == '__main__':
         else:
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
-            sentences = get_sentences(data['content'])
+            sentences = get_sentences(data['content'], len(''.join(title)))
             sentences = seg_char_sents(sentences)
             content = []
             content_em = []
@@ -336,8 +341,8 @@ if __name__ == '__main__':
         datas_em.append(new_data_em)
 
     f.close()
-    data_dump(datas, '../datasets/example_ner_no_emotion.pkl')
-    data_dump(datas_em, '../datasets/example_ner_has_emotion.pkl')
+    data_dump(datas, '../datasets/256/example_ner_no_emotion.pkl')
+    data_dump(datas_em, '../datasets/256/example_ner_has_emotion.pkl')
 
     f = open('../data/coreEntityEmotion_train.txt', 'r')
     datas = []
@@ -346,7 +351,8 @@ if __name__ == '__main__':
     f.seek(0)
     for index, line in enumerate(f.readlines()):
         data = json.loads(line)
-        print('{}/{}'.format(index, all_index))
+        if index % 100 == 0:
+            print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data_em = {}
         new_data['newsId'] = data['newsId']
@@ -375,7 +381,7 @@ if __name__ == '__main__':
         else:
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
-            sentences = get_sentences(data['content'])
+            sentences = get_sentences(data['content'], len(''.join(title)))
             sentences = seg_char_sents(sentences)
             content = []
             content_em = []
@@ -393,8 +399,8 @@ if __name__ == '__main__':
         datas_em.append(new_data_em)
 
     f.close()
-    data_dump(datas, '../datasets/train_ner_no_emotion.pkl')
-    data_dump(datas_em, '../datasets/train_ner_has_emotion.pkl')
+    data_dump(datas, '../datasets/256/train_ner_no_emotion.pkl')
+    data_dump(datas_em, '../datasets/256/train_ner_has_emotion.pkl')
 
     f = open('../data/coreEntityEmotion_test_stage2.txt', 'r')
     datas = []
@@ -402,7 +408,8 @@ if __name__ == '__main__':
     f.seek(0)
     for index, line in enumerate(f.readlines()):
         data = json.loads(line)
-        print('{}/{}'.format(index, all_index))
+        if index % 100 == 0:
+            print('{}/{}'.format(index, all_index))
         new_data = {}
         new_data['newsId'] = data['newsId']
 
@@ -418,7 +425,7 @@ if __name__ == '__main__':
         else:
             if data['content'][-1] not in '。｡！!？?':
                 data['content'] = data['content'] + '。'
-            sentences = get_sentences(data['content'])
+            sentences = get_sentences(data['content'], len(''.join(title)))
             sentences = seg_char_sents(sentences)
             content = []
             for sent in sentences:
@@ -428,6 +435,6 @@ if __name__ == '__main__':
         datas.append(new_data)
 
     f.close()
-    data_dump(datas, '../datasets/test_ner2.pkl')
+    data_dump(datas, '../datasets/256/test_ner2.pkl')
 
     print('截断总数{}'.format(cut_num))
