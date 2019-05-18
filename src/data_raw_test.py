@@ -6,7 +6,6 @@ from sklearn.model_selection import train_test_split
 每一个句子空一行 每一则新闻空两行
 '''
 file = "../datasets/news_test.pkl"
-split = "627de65d"
 data = load_data(file)
 print("all data: ", len(data))
 
@@ -47,7 +46,7 @@ def data2txt(data):
                         f.write("\n")
                 f.write("\n")
         # 下一新闻
-        f.write(split + "\n")
+        f.write("\n")
         count += 1
         # if count > 2:
         #     break
