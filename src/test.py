@@ -28,8 +28,12 @@ def get_test_dataloader():
 
 def run():
     ################################ Model Config ###################################
-    num_labels_emo = 4
-    num_labels_ent = 3
+    if args.lbl_method == "BIO":
+        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_ent = 3  # O B I
+    else:
+        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_ent = 4  # O B I E
     model = NetY3.from_pretrained(args.bert_model,
                                   cache_dir="",
                                   num_labels_ent=num_labels_ent,
@@ -157,6 +161,10 @@ if __name__ == '__main__':
     parser.add_argument("--raw",
                         action="store_true",
                         help="是否存储置信度")
+    parser.add_argument("--lbl_method",
+                        type=str,
+                        default="BIO",
+                        help="BIO / BIEO")
 
     args = parser.parse_args()
 

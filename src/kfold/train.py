@@ -96,8 +96,12 @@ def train(dataset, cv):
     print(f"training  cv: {cv}")
 
     ################################ Model Config ###################################
-    num_labels_emo = 4  # O POS NEG NORM
-    num_labels_ent = 3  # O B I
+    if args.lbl_method == "BIO":
+        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_ent = 3  # O B I
+    else:
+        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_ent = 4  # O B I E
 
     model = NetY3.from_pretrained(args.bert_model,
                                   cache_dir="",
@@ -431,6 +435,10 @@ if __name__ == '__main__':
     parser.add_argument("--multi",
                         action="store_true",
                         help="multi alpha or not")
+    parser.add_argument("--lbl_method",
+                        type=str,
+                        default="BIO",
+                        help="BIO / BIEO")
 
     args = parser.parse_args()
 
