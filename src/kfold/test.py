@@ -7,7 +7,7 @@ import torch
 from ignite.engine import Engine, Events
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from torch.utils.data import DataLoader, SequentialSampler, TensorDataset
-from models import NetX3
+from models import NetY3
 from utils import load_data
 
 

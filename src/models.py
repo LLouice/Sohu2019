@@ -353,6 +353,8 @@ class NetX(BertPreTrainedModel):
 
 
 class NetX2(BertPreTrainedModel):
+    '''不 mask 掉 B 句'''
+
     def __init__(self, config, num_labels_ent, num_labels_emo, dp):
         super(NetX2, self).__init__(config)
         self.num_labels_ent = num_labels_ent
@@ -373,7 +375,7 @@ class NetX2(BertPreTrainedModel):
         #         print("not freeze: ", idx, n)
         # print("model freeze over!")
 
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(self.dp)
         self.classifier_ent = nn.Linear(config.hidden_size * 2, num_labels_ent)
         self.classifier_emo = nn.Linear(config.hidden_size * 2, num_labels_emo)
         self.apply(self.init_bert_weights)
@@ -387,7 +389,7 @@ class NetX2(BertPreTrainedModel):
         CLS = CLS.repeat(1, sequence_output.size(1)).view(sequence_output.size())
         sequence_output = torch.cat([sequence_output, CLS], dim=-1)
         # sequence_output = self.dropout(sequence_output)
-        sequence_output = nn.Dropout(self.dp)(sequence_output)
+        sequence_output = self.dropout(sequence_output)
         logits_ent = self.classifier_ent(sequence_output)
         logits_emo = self.classifier_emo(sequence_output)
 
@@ -407,7 +409,7 @@ class NetX2(BertPreTrainedModel):
                 #     3. 122 222 111 都做情感
                 # 似乎把metric的逻辑和训练逻辑弄在一起了
                 ent_mask = torch.argmax(torch.softmax(active_logits_ent, dim=-1), dim=-1)  # [L,]
-                ent_mask = ent_mask == 2  # [L', ]
+                ent_mask = ent_mask == 1  # [L', ]
                 mask_logits_emo = active_logits_emo[ent_mask]  # [L', ]
                 mask_labels_emo = active_labels_emo[ent_mask]
                 assert mask_logits_emo.size(0) == mask_labels_emo.size(0)
@@ -457,7 +459,7 @@ class NetX3(BertPreTrainedModel):
         #         print("not freeze: ", idx, n)
         # print("model freeze over!")
 
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(self.dp)
         self.classifier_ent = nn.Linear(config.hidden_size * 2, num_labels_ent)
         self.classifier_emo = nn.Linear(config.hidden_size * 2, num_labels_emo)
         self.apply(self.init_bert_weights)
@@ -471,7 +473,7 @@ class NetX3(BertPreTrainedModel):
         CLS = CLS.repeat(1, sequence_output.size(1)).view(sequence_output.size())
         sequence_output = torch.cat([sequence_output, CLS], dim=-1)
         # sequence_output = self.dropout(sequence_output)
-        sequence_output = nn.Dropout(self.dp)(sequence_output)
+        sequence_output = self.dropout(sequence_output)
         logits_ent = self.classifier_ent(sequence_output)
         logits_emo = self.classifier_emo(sequence_output)
 
@@ -912,3 +914,227 @@ class Net03(BertPreTrainedModel):
             return active_logits, active_labels, active_input_ids
         else:
             return logits
+
+
+############################################################## 精简版 ============================================
+class NetY1(BertPreTrainedModel):
+    '''不加 CLS'''
+
+    def __init__(self, config, num_labels_ent, num_labels_emo, dp):
+        super(NetY1, self).__init__(config)
+        self.num_labels_ent = num_labels_ent
+        self.num_labels_emo = num_labels_emo
+        self.bert = BertModel(config)
+        self.dp = dp
+        self.dropout = nn.Dropout(self.dp)
+        self.classifier_ent = nn.Linear(config.hidden_size, num_labels_ent)
+        self.classifier_emo = nn.Linear(config.hidden_size, num_labels_emo)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, myinput_ids=None, token_type_ids=None, attention_mask=None, labels_ent=None,
+                labels_emo=None):
+        # _ is [CLS] 可以试试拼接在序列每个字上
+        sequence_output, CLS = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        sequence_output = self.dropout(sequence_output)
+        logits_ent = self.classifier_ent(sequence_output)
+        logits_emo = self.classifier_emo(sequence_output)
+
+        if labels_ent is not None and labels_emo is not None:
+            # loss_fct = nn.CrossEntropyLoss()
+            # Only keep active parts of the loss, use 10 class !!!
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)[active_loss]  # [L, C_ent]
+                active_labels_ent = labels_ent.view(-1)[active_loss]  # [L, ]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)[active_loss]  # [L, C_emo]
+                active_labels_emo = labels_emo.view(-1)[active_loss]  # [L, ]
+                active_myinput_ids = myinput_ids.view(-1)[active_loss]  # [L, ]
+            else:
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)  # [L, C_ent]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)  # [ent_mask] #[L', ]
+                active_labels_emo = labels_emo.view(-1)
+                active_labels_ent = labels_ent.view(-1)
+                active_myinput_ids = myinput_ids.view(-1)
+            return active_logits_ent, active_labels_ent, active_logits_emo, active_labels_emo, active_myinput_ids
+        else:
+            # 可以加ent_mask 也可以不加
+            return logits_ent, logits_emo
+
+
+class NetY2(BertPreTrainedModel):
+    '''CLS 但不 mask 掉 B 句'''
+
+    def __init__(self, config, num_labels_ent, num_labels_emo, dp):
+        super(NetY2, self).__init__(config)
+        self.num_labels_ent = num_labels_ent
+        self.num_labels_emo = num_labels_emo
+        self.bert = BertModel(config)
+        self.dp = dp
+        self.dropout = nn.Dropout(self.dp)
+        self.classifier_ent = nn.Linear(config.hidden_size * 2, num_labels_ent)
+        self.classifier_emo = nn.Linear(config.hidden_size * 2, num_labels_emo)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, myinput_ids=None, token_type_ids=None, attention_mask=None, labels_ent=None,
+                labels_emo=None):
+        # _ is [CLS] 可以试试拼接在序列每个字上
+        sequence_output, CLS = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        # bs, 128 ,768   bs,768
+        # use repeat
+        CLS = CLS.repeat(1, sequence_output.size(1)).view(sequence_output.size())
+        sequence_output = torch.cat([sequence_output, CLS], dim=-1)
+        # sequence_output = self.dropout(sequence_output)
+        sequence_output = self.dropout(sequence_output)
+        logits_ent = self.classifier_ent(sequence_output)
+        logits_emo = self.classifier_emo(sequence_output)
+
+        if labels_ent is not None and labels_emo is not None:
+            # loss_fct = nn.CrossEntropyLoss()
+            # Only keep active parts of the loss, use 10 class !!!
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)[active_loss]  # [L, C_ent]
+                active_labels_ent = labels_ent.view(-1)[active_loss]  # [L, ]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)[active_loss]  # [L, C_emo]
+                active_labels_emo = labels_emo.view(-1)[active_loss]  # [L, ]
+                active_myinput_ids = myinput_ids.view(-1)[active_loss]  # [L, ]
+            else:
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)  # [L, C_ent]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)  # [ent_mask] #[L', ]
+                active_labels_emo = labels_emo.view(-1)
+                active_labels_ent = labels_ent.view(-1)
+                active_myinput_ids = myinput_ids.view(-1)
+            return active_logits_ent, active_labels_ent, active_logits_emo, active_labels_emo, active_myinput_ids
+        else:
+            # 可以加ent_mask 也可以不加
+            return logits_ent, logits_emo
+
+
+class NetY3(BertPreTrainedModel):
+    '''
+    只对A句进行loss计算
+    '''
+
+    def __init__(self, config, num_labels_ent, num_labels_emo, dp):
+        super(NetY3, self).__init__(config)
+        self.num_labels_ent = num_labels_ent
+        self.num_labels_emo = num_labels_emo
+        self.bert = BertModel(config)
+        self.dp = dp
+        self.dropout = nn.Dropout(self.dp)
+        self.classifier_ent = nn.Linear(config.hidden_size * 2, num_labels_ent)
+        self.classifier_emo = nn.Linear(config.hidden_size * 2, num_labels_emo)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, myinput_ids=None, token_type_ids=None, attention_mask=None, labels_ent=None,
+                labels_emo=None):
+        # _ is [CLS] 可以试试拼接在序列每个字上
+        sequence_output, CLS = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        # bs, 128 ,768   bs,768
+        # use repeat
+        CLS = CLS.repeat(1, sequence_output.size(1)).view(sequence_output.size())
+        sequence_output = torch.cat([sequence_output, CLS], dim=-1)
+        # sequence_output = self.dropout(sequence_output)
+        sequence_output = self.dropout(sequence_output)
+        logits_ent = self.classifier_ent(sequence_output)
+        logits_emo = self.classifier_emo(sequence_output)
+
+        if labels_ent is not None and labels_emo is not None:
+            # loss_fct = nn.CrossEntropyLoss()
+            # Only keep active parts of the loss, use 10 class !!!
+            if attention_mask is not None:
+                active_mask = attention_mask.view(-1) == 1
+                active_seg = token_type_ids.view(-1)[active_mask]
+                active_seg = active_seg == 0
+
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)[active_mask][active_seg]  # [L, C_ent]
+                active_labels_ent = labels_ent.view(-1)[active_mask][active_seg]  # [L, ]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)[active_mask][active_seg]  # [L, C_emo]
+                active_labels_emo = labels_emo.view(-1)[active_mask][active_seg]  # [L, ]
+                active_myinput_ids = myinput_ids.view(-1)[active_mask][active_seg]  # [L, ]
+            else:
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)  # [L, C_ent]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)  # [ent_mask] #[L', ]
+                active_labels_emo = labels_emo.view(-1)
+                active_labels_ent = labels_ent.view(-1)
+                active_myinput_ids = myinput_ids.view(-1)
+            return active_logits_ent, active_labels_ent, active_logits_emo, active_labels_emo, active_myinput_ids
+        else:
+            # 可以加ent_mask 也可以不加
+            return logits_ent, logits_emo
+
+
+class NetY3_fz(BertPreTrainedModel):
+    '''
+    NeX3 的 freeze 版本
+    '''
+
+    def __init__(self, config, num_labels_ent, num_labels_emo, dp):
+        super(NetY3_fz, self).__init__(config)
+        self.num_labels_ent = num_labels_ent
+        self.num_labels_emo = num_labels_emo
+        self.bert = BertModel(config)
+        self.dp = dp
+        self.dropout = nn.Dropout(self.dp)
+        self.classifier_ent = nn.Linear(config.hidden_size * 2, num_labels_ent)
+        self.classifier_emo = nn.Linear(config.hidden_size * 2, num_labels_emo)
+        self.apply(self.init_bert_weights)
+
+    def freeze(self):
+        for idx, (n, m) in enumerate(self.bert.named_modules()):
+            if idx < 179:
+                for p in m.parameters():
+                    p.requires_grad = False
+                    print(idx, n)
+            else:
+                print("not freeze: ", idx, n)
+        print("model freeze over!")
+
+    def unfreeze(self):
+        freeze_paras = []
+        for idx, (n, m) in enumerate(self.bert.named_modules()):
+            for p in m.parameters():
+                if not p.requires_grad:
+                    p.requires_grad = True
+                    freeze_paras.append(p)
+        print("unfreeze over")
+        return freeze_paras
+
+    def forward(self, input_ids, myinput_ids=None, token_type_ids=None, attention_mask=None, labels_ent=None,
+                labels_emo=None):
+        # _ is [CLS] 可以试试拼接在序列每个字上
+        sequence_output, CLS = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        # bs, 128 ,768   bs,768
+        # use repeat
+        CLS = CLS.repeat(1, sequence_output.size(1)).view(sequence_output.size())
+        sequence_output = torch.cat([sequence_output, CLS], dim=-1)
+        # sequence_output = self.dropout(sequence_output)
+        sequence_output = nn.Dropout(self.dp)(sequence_output)
+        logits_ent = self.classifier_ent(sequence_output)
+        logits_emo = self.classifier_emo(sequence_output)
+
+        if labels_ent is not None and labels_emo is not None:
+            # loss_fct = nn.CrossEntropyLoss()
+            # Only keep active parts of the loss, use 10 class !!!
+            if attention_mask is not None:
+                active_mask = attention_mask.view(-1) == 1
+                active_seg = token_type_ids.view(-1)[active_mask]
+                active_seg = active_seg == 0
+
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)[active_mask][active_seg]  # [L, C_ent]
+                active_labels_ent = labels_ent.view(-1)[active_mask][active_seg]  # [L, ]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)[active_mask][active_seg]  # [L, C_emo]
+                active_labels_emo = labels_emo.view(-1)[active_mask][active_seg]  # [L, ]
+                active_myinput_ids = myinput_ids.view(-1)[active_mask][active_seg]  # [L, ]
+            else:
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)  # [L, C_ent]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)  # [ent_mask] #[L', ]
+                active_labels_emo = labels_emo.view(-1)
+                active_labels_ent = labels_ent.view(-1)
+                active_myinput_ids = myinput_ids.view(-1)
+            return active_logits_ent, active_labels_ent, active_logits_emo, active_labels_emo, active_myinput_ids
+        else:
+            # 可以加ent_mask 也可以不加
+            return logits_ent, logits_emo
+
+###################################################################################################################

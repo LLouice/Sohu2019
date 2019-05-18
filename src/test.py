@@ -5,7 +5,7 @@ import torch
 from ignite.engine import Engine, Events
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from torch.utils.data import DataLoader, SequentialSampler, TensorDataset
-from models import NetX3
+from models import NetY3
 
 
 def get_test_dataloader():
@@ -30,7 +30,7 @@ def run():
     ################################ Model Config ###################################
     num_labels_emo = 4
     num_labels_ent = 3
-    model = NetX3.from_pretrained(args.bert_model,
+    model = NetY3.from_pretrained(args.bert_model,
                                   cache_dir="",
                                   num_labels_ent=num_labels_ent,
                                   num_labels_emo=num_labels_emo,

@@ -19,7 +19,8 @@ from ignite.metrics import RunningAverage
 from ignite.contrib.handlers.tensorboard_logger import *
 from metric import FScore
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
-from models import NetX3, NetX3_fz
+# from models import NetX3, NetX3_fz
+from models import NetY1, NetY2, NetY3, NetY3_fz
 from loss import FocalLoss
 
 
@@ -82,13 +83,13 @@ def train():
         num_labels_ent = 4  # O B I E
 
     if not args.freeze_step > 0:
-        model = NetX3.from_pretrained(args.bert_model,
+        model = NetY3.from_pretrained(args.bert_model,
                                       cache_dir="",
                                       num_labels_ent=num_labels_ent,
                                       num_labels_emo=num_labels_emo,
                                       dp=args.dp)
     else:
-        model = NetX3_fz.from_pretrained(args.bert_model,
+        model = NetY3_fz.from_pretrained(args.bert_model,
                                          cache_dir="",
                                          num_labels_ent=num_labels_ent,
                                          num_labels_emo=num_labels_emo,
@@ -164,7 +165,7 @@ def train():
         input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
 
         optimizer.zero_grad()
-        act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, mask_logits_emo, mask_y_emo, act_myinput_ids = model(
+        act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids = model(
             input_ids, myinput_ids, segment_ids, input_mask,
             label_ent_ids, label_emo_ids)
         # Only keep active parts of the loss
@@ -197,7 +198,7 @@ def train():
         input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
 
         with torch.no_grad():
-            act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, mask_logits_emo, mask_y_emo, act_myinput_ids = model(
+            act_logits_ent, act_y_ent, act_logits_emo, act_y_emo,  act_myinput_ids = model(
                 input_ids, myinput_ids, segment_ids,
                 input_mask,
                 label_ent_ids, label_emo_ids)
@@ -224,7 +225,7 @@ def train():
             engine.state.metrics["batchloss_emo"] = loss_emo.item()
         # act_logits = torch.argmax(torch.softmax(act_logits, dim=-1), dim=-1)  # [-1, 1]
         # loss = loss.mean()
-        return loss.item(), act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, mask_logits_emo, mask_y_emo, act_myinput_ids  # [-1, 11]
+        return loss.item(), act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids  # [-1, 11]
 
     trainer = Engine(step)
     trn_evaluator = Engine(infer)
