@@ -74,8 +74,12 @@ def get_data_loader():
 
 def train():
     ################################ Model Config ###################################
-    num_labels_emo = 4  # O POS NEG NORM
-    num_labels_ent = 3  # O B I
+    if args.lbl_method == "BIO":
+        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_ent = 3  # O B I
+    else:
+        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_ent = 4  # O B I E
 
     if not args.freeze_step > 0:
         model = NetX3.from_pretrained(args.bert_model,
@@ -141,14 +145,20 @@ def train():
     else:
         criterion = FocalLoss(args.gamma)
 
+    iterations = None
+
     def step(engine, batch):
         if args.freeze_step > 0:
-            if engine.state.epoch-1 == args.freeze_step:
+            if engine.state.epoch - 1 == args.freeze_step:
                 freeze_paras = model.module.unfreeze()
                 # opt unfreeze
                 optimizer.add_param_group({'params': freeze_paras})
                 # run only once
                 args.freeze_step = -1
+        if args.eval_radio > 0:
+            global iterations
+            iterations = len(trn_dataloader) // len(batch)
+
         model.train()
         batch = tuple(t.to(device) for t in batch)
         input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
@@ -235,9 +245,12 @@ def train():
     if args.eval_step > 0:
         cpe = CustomPeriodicEvent(n_iterations=args.eval_step)
         cpe.attach(trainer)
+    if args.eval_radio > 0:
+        cpe2 = CustomPeriodicEvent(n_iterations=iterations * args.eval_radio + 1)
+        cpe2.attach(trainer)
 
     ############################## My F1 ###################################
-    F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]])
+    F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]], lbl_method=args.lbl_method)
     F1.attach(val_evaluator, "F1")
     F1.attach(val_evaluator_iteration, "F1")
 
@@ -282,6 +295,9 @@ def train():
 
     if args.eval_step > 0:
         trainer.add_event_handler(eval(f"cpe.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
+                                  compute_val_metric_iteration)
+    if args.eval_radio > 0:
+        trainer.add_event_handler(eval(f"cpe2.Events.ITERATIONS_{iterations * args.eval_radio + 1}_COMPLETED"),
                                   compute_val_metric_iteration)
 
     @val_evaluator.on(Events.EPOCH_COMPLETED)
@@ -348,11 +364,13 @@ def train():
                      event_name=Events.ITERATION_COMPLETED)
     '''
     tb_logger.attach(trainer,
-                     log_handler=OutputHandler(tag="training", metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
+                     log_handler=OutputHandler(tag="training",
+                                               metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
                      event_name=Events.ITERATION_COMPLETED)
 
     tb_logger.attach(val_evaluator,
-                     log_handler=OutputHandler(tag="validation", metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
+                     log_handler=OutputHandler(tag="validation",
+                                               metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
                      event_name=Events.ITERATION_COMPLETED)
     tb_logger.attach(trainer,
                      log_handler=OutputHandler(tag="training", metric_names=["total_loss", "ent_loss", "emo_loss"]),
@@ -471,6 +489,10 @@ if __name__ == '__main__':
                         type=int,
                         default=-1,
                         help="the step to val")
+    parser.add_argument("--lbl_method",
+                        type=str,
+                        default="BIO",
+                        help="BIO / BIEO")
 
     args = parser.parse_args()
 

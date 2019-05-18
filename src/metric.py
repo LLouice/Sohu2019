@@ -16,8 +16,9 @@ class FScore(Metric):
     - `update` must receive output of the form `(y_pred, y)`.
     """
 
-    def __init__(self, output_transform=lambda x: x):
+    def __init__(self, output_transform=lambda x: x, lbl_method="BIO"):
         self.EMOS_MAP = {"0":"OTHER","1": "POS", "2": "NEG", "3": "NORM"}
+        self.lbl_method = lbl_method
         self.ents = defaultdict(list)
         self.ents_pred = defaultdict(list)
         self.f1s_ent = []
@@ -48,7 +49,10 @@ class FScore(Metric):
         y_ent = "".join([str(i.item()) for i in y_ent])
         y_pred_emo = "".join([str(i.item()) for i in y_pred_emo])
         y_emo = "".join([str(i.item()) for i in y_emo])
-        pattern = re.compile("1[2]")  # 贪婪匹配
+        if self.lbl_method == "BIO":
+            pattern = re.compile("1[2]*")  # 贪婪匹配
+        else:
+            pattern = re.compile("1[2]*3")  # 贪婪匹配
         self._find_ents(y_pred_ent, y_pred_emo, pattern, tokens, self.ents_pred, "pred")
         self._find_ents(y_ent,y_emo, pattern, tokens, self.ents)
         ENTS_PRED = {ent for ent in self.ents_pred}

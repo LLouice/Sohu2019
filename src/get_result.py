@@ -8,11 +8,10 @@ import time
 
 EMOS_MAP = {"0": "OTHER", "1": "POS", "2": "NEG", "3": "NORM"}
 ID2TOK = load_data("../datasets/ID2TOK.pkl")
-pattern = re.compile("1[2]*")  # 贪婪匹配
 ######################################################################################
 
 
-def _get_res(cur_input_ids, cur_myinput_ids, cur_pred_ent, cur_pred_ent_conf, cur_pred_emo, cur_pred_emo_conf, S):
+def _get_res(pattern ,cur_input_ids, cur_myinput_ids, cur_pred_ent, cur_pred_ent_conf, cur_pred_emo, cur_pred_emo_conf, S):
     '''
     :param cur_myinput_ids:
     :param cur_pred_ent:
@@ -62,13 +61,20 @@ def main():
                         type=str,
                         required=False,
                         help="result file")
-
     parser.add_argument("--pred",
                         default="pred_new.h5",
+                        type=str, required=False)
+    parser.add_argument("--lbl_method",
+                        default="BIO",
                         type=str, required=False)
     args = parser.parse_args()
     # ------------------------------------------------------------------------------
     # ------------------------------- output file ----------------------------------
+    if args.lab_method == "BIO":
+        pattern = re.compile("1[2]*")  # 贪婪匹配
+    else:
+        pattern = re.compile("1[2]*3")  # 贪婪匹配
+
     result_file = f"../results/{args.res}"
     pred_file = f"../preds/{args.pred}"
     f_result = open(result_file, "wt")

@@ -121,7 +121,7 @@ class DataProcessor(object):
         """Gets a collection of `InputExample`s for the dev set."""
         raise NotImplementedError()
 
-    def get_labels(self):
+    def get_labels(self, label_method):
         """Gets the list of labels for this data set."""
         raise NotImplementedError()
 
@@ -152,8 +152,13 @@ class NerProcessor(DataProcessor):
             return self._create_examples(
                 self._read_tsv(os.path.join(data_dir, "lite_val.txt")), "train")
 
-    def get_labels(self):
-        return ["O", "B-POS", "I-POS", "B-NEG", "I-NEG", "B-NORM", "I-NORM", "X", "[CLS]", "[SEP]"]
+    def get_labels(self, label_method):
+        if label_method == "BIO":
+            return ["O", "B-POS", "I-POS", "B-NEG", "I-NEG", "B-NORM", "I-NORM", "X", "[CLS]", "[SEP]"]
+        else:
+            # BIOE
+            return ["O", "B-POS", "I-POS", "E-POS", "B-NEG", "I-NEG", "E-NEG", "B-NORM", "I-NORM", "E-NORM", "X",
+                    "[CLS]", "[SEP]"]
 
     def _create_examples(self, lines, set_type):
         examples = []
@@ -309,7 +314,24 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                         else:
                             labels.append("I-NORM")
                     else:
-                        labels.append(label_1)
+                        if lbl_method == "BIO":
+                            labels.append(label_1)
+                        else:
+                            if label_1 == "E-POS":
+                                if m < len(token) - 1:
+                                    labels.append("I-POS")
+                                else:
+                                    labels.append("E-POS")
+                            if label_1 == "E-NEG":
+                                if m < len(token) - 1:
+                                    labels.append("I-NEG")
+                                else:
+                                    labels.append("E-NEG")
+                            if label_1 == "E-NORM":
+                                if m < len(token) - 1:
+                                    labels.append("I-NORM")
+                                else:
+                                    labels.append("E-NORM")
 
         _tokenize(textlist_A, labellist_A, tokens_A, mytokens_A, labels_A)
         _tokenize(textlist_B, labellist_B, tokens_B, mytokens_B, labels_B)
@@ -390,8 +412,43 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             L[L == 9] = 0
             L[L == 10] = 0
             label_ent_ids = L.tolist()
-        elif lbl_method == "BIESO":
-            pass
+        elif lbl_method == "BIEO":
+            L[L == 13] = 0
+            L[L == 12] = 0
+            L[L == 11] = 0
+            L[L == 1] = 0
+
+            L[L == 2] = 1
+            L[L == 3] = 1
+            L[L == 4] = 1
+
+            L[L == 5] = 2
+            L[L == 6] = 2
+            L[L == 7] = 2
+
+            L[L == 8] = 3
+            L[L == 9] = 3
+            L[L == 10] = 3
+            label_emo_ids = L.tolist()
+            # ------------------
+            L = np.array(label_ids)
+            L[L == 13] = 0
+            L[L == 12] = 0
+            L[L == 11] = 0
+            L[L == 1] = 0
+
+            L[L == 2] = 1  # B
+            L[L == 5] = 1  # B
+            L[L == 8] = 1  # B
+
+            L[L == 3] = 2  # I
+            L[L == 6] = 2  # I
+            L[L == 9] = 2  # I
+
+            L[L == 4] = 3  # E
+            L[L == 7] = 3  # E
+            L[L == 10] = 3  # E
+            label_ent_ids = L.tolist()
         else:
             pass
 
@@ -489,7 +546,7 @@ def main():
 
     processor = processors[task_name]()
 
-    label_list = processor.get_labels()
+    label_list = processor.get_labels(args.label_method)
     tokenizer = BertTokenizer.from_pretrained(args.bert_token_model, do_lower_case=args.do_lower_case)
 
     if not os.path.exists("../datasets/ID2TOK.pkl"):
