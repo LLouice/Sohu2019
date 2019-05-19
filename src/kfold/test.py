@@ -90,7 +90,7 @@ def run(test_dataloader, cv):
         num_labels_ent = 3  # O B I
     else:
         num_labels_emo = 4 # O POS NEG NORM
-        num_labels_ent = 4  # O B I E
+        num_labels_ent = 5  # O B I E S
     model = NetY3.from_pretrained(args.bert_model,
                                   cache_dir="",
                                   num_labels_ent=num_labels_ent,
