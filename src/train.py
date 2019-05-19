@@ -142,10 +142,8 @@ def train():
     # optimizer = Adam(filter(lambda p:p.requires_grad, model.parameters()), args.lr, weight_decay=5e-3)
     ######################################################################
     if not args.focal:
-        criterion = torch.nn.CrossEntropyLoss()
-    else:
         if not args.wc:
-            criterion = FocalLoss(args.gamma)
+             criterion = torch.nn.CrossEntropyLoss()
         else:
             # O B I E S
             wc_ent = torch.tensor([0.5, 2, 1, 2, 2]).to(device)
@@ -153,6 +151,9 @@ def train():
             wc_emo = torch.tesnor([0.5, 0.8, 1, 1]).to(device)
             criterion_ent = torch.nn.CrossEntropyLoss(weight=wc_ent)
             criterion_emo = torch.nn.CrossEntropyLoss(weight=wc_emo)
+            print("weight classes over!")
+    else:
+        criterion = FocalLoss(args.gamma)
 
     iterations = None
 
