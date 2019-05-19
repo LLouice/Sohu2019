@@ -144,7 +144,15 @@ def train():
     if not args.focal:
         criterion = torch.nn.CrossEntropyLoss()
     else:
-        criterion = FocalLoss(args.gamma)
+        if not args.wc:
+            criterion = FocalLoss(args.gamma)
+        else:
+            # O B I E S
+            wc_ent = torch.tensor([0.5, 2, 1, 2, 2]).to(device)
+            # O POS NEG NORM
+            wc_emo = torch.tesnor([0.5, 0.8, 1, 1]).to(device)
+            criterion_ent = torch.nn.CrossEntropyLoss(weight=wc_ent)
+            criterion_emo = torch.nn.CrossEntropyLoss(weight=wc_emo)
 
     iterations = None
 
@@ -169,9 +177,12 @@ def train():
             input_ids, myinput_ids, segment_ids, input_mask,
             label_ent_ids, label_emo_ids)
         # Only keep active parts of the loss
-        loss_ent = criterion(act_logits_ent, act_y_ent)
-
-        loss_emo = criterion(act_logits_emo, act_y_emo)
+        if not args.wc:
+            loss_ent = criterion(act_logits_ent, act_y_ent)
+            loss_emo = criterion(act_logits_emo, act_y_emo)
+        else:
+            loss_ent = criterion_ent(act_logits_ent, act_y_ent)
+            loss_emo = criterion_emo(act_logits_emo, act_y_emo)
         # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
         if not args.multi:
             loss = alpha * loss_ent + loss_emo
@@ -203,9 +214,12 @@ def train():
                 input_mask,
                 label_ent_ids, label_emo_ids)
             # Only keep active parts of the loss
-            loss_ent = criterion(act_logits_ent, act_y_ent)
-            # loss_emo = criterion_fl(act_logits_emo, act_y_emo)
-            loss_emo = criterion(act_logits_emo, act_y_emo)
+            if not args.wc:
+                loss_ent = criterion(act_logits_ent, act_y_ent)
+                loss_emo = criterion(act_logits_emo, act_y_emo)
+            else:
+                loss_ent = criterion_ent(act_logits_ent, act_y_ent)
+                loss_emo = criterion_emo(act_logits_emo, act_y_emo)
             # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
             if not args.multi:
                 loss = alpha * loss_ent + loss_emo
@@ -498,6 +512,9 @@ if __name__ == '__main__':
                         type=str,
                         default="BIO",
                         help="BIO / BIEOS")
+    parser.add_argument("--wc",
+                        action="store_true",
+                        help="weight class")
 
     args = parser.parse_args()
 
