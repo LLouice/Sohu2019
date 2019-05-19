@@ -154,10 +154,11 @@ class NerProcessor(DataProcessor):
 
     def get_labels(self, label_method):
         if label_method == "BIO":
-            return ["O", "B-POS", "I-POS", "B-NEG", "I-NEG", "B-NORM", "I-NORM", "X", "[CLS]", "[SEP]"]
+            return ["O", "B-POS", "I-POS", "B-NEG", "I-NEG", "B-NORM", "I-NORM", "[CLS]", "[SEP]"]
         else:
-            # BIOE
-            return ["O", "B-POS", "I-POS", "E-POS", "B-NEG", "I-NEG", "E-NEG", "B-NORM", "I-NORM", "E-NORM", "X",
+            # BIESO
+            return ["O", "B-POS", "I-POS", "E-POS", "B-NEG", "I-NEG", "E-NEG", "B-NORM", "I-NORM", "E-NORM",
+                    "S-POS", "S-NEG", "S-NORM",
                     "[CLS]", "[SEP]"]
 
     def _create_examples(self, lines, set_type):
@@ -318,7 +319,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                         if lbl_method == "BIO":
                             labels.append(label_1)
                         else:
-                            if len(token) >1 and label_1[0] == "E":
+                            if len(token) > 1 and label_1[0] == "E":
                                 if label_1 == "E-POS":
                                     if m < len(token) - 1:
                                         labels.append("I-POS")
@@ -416,29 +417,30 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             L[L == 9] = 0
             L[L == 10] = 0
             label_ent_ids = L.tolist()
-        elif lbl_method == "BIEO":
-            L[L == 13] = 0
-            L[L == 12] = 0
-            L[L == 11] = 0
+        elif lbl_method == "BIEOS":
+            L[L == 14] = 0
+            L[L == 15] = 0
             L[L == 1] = 0
 
             L[L == 2] = 1
             L[L == 3] = 1
             L[L == 4] = 1
+            L[L == 11] = 1
 
             L[L == 5] = 2
             L[L == 6] = 2
             L[L == 7] = 2
+            L[L == 12] = 2
 
             L[L == 8] = 3
             L[L == 9] = 3
             L[L == 10] = 3
+            L[L == 13] = 3
             label_emo_ids = L.tolist()
             # ------------------
             L = np.array(label_ids)
-            L[L == 13] = 0
-            L[L == 12] = 0
-            L[L == 11] = 0
+            L[L == 14] = 0
+            L[L == 15] = 0
             L[L == 1] = 0
 
             L[L == 2] = 1  # B
@@ -452,6 +454,10 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             L[L == 4] = 3  # E
             L[L == 7] = 3  # E
             L[L == 10] = 3  # E
+
+            L[L==11] = 4
+            L[L==12] = 4
+            L[L==13] = 4
             label_ent_ids = L.tolist()
         else:
             pass

@@ -101,7 +101,7 @@ def train(dataset, cv):
         num_labels_ent = 3  # O B I
     else:
         num_labels_emo = 4 # O POS NEG NORM
-        num_labels_ent = 4  # O B I E
+        num_labels_ent = 5  # O B I E S
 
     model = NetY3.from_pretrained(args.bert_model,
                                   cache_dir="",
@@ -231,7 +231,7 @@ def train(dataset, cv):
     cpe5.attach(trainer)
 
     ############################## My F1 ###################################
-    F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]])
+    F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]], lbl_method="BIEOS")
     F1.attach(val_evaluator, "F1")
 
     #####################################  progress bar #########################
@@ -277,9 +277,9 @@ def train(dataset, cv):
         # Save a trained model and the associated configuration
         # model_to_save = model.module if hasattr(model,
         #                                         'module') else model  # Only save the model it-self
-        output_model_file = f"../ckps/cv/cv{cv}.pth"
-        torch.save(model.state_dict(), output_model_file)
-        print(f"save {output_model_file} successfully!")
+        # output_model_file = f"../ckps/cv/cv{cv}.pth"
+        # torch.save(model.state_dict(), output_model_file)
+        # print(f"save {output_model_file} successfully!")
 
     ######################################################################
 
@@ -289,7 +289,6 @@ def train(dataset, cv):
         # loss = engine.state.metrics["loss"]
         return f1
 
-    '''     
     if not args.lite:
         ckp_dir = os.path.join(args.checkpoint_model_dir, "full", "cv", str(cv), args.hyper_cfg)
     else:
@@ -303,12 +302,11 @@ def train(dataset, cv):
                                          n_saved=5,
                                          require_empty=False, create_dir=True)
 
-    trainer.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
-                               to_save={'model_3FC': model})
+    # trainer.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
+    #                            to_save={'model_3FC': model})
     
     val_evaluator.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
                                    to_save={'model_title': model})
-    '''
 
     ######################################################################
 

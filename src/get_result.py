@@ -73,7 +73,7 @@ def main():
     if args.lab_method == "BIO":
         pattern = re.compile("1[2]*")  # 贪婪匹配
     else:
-        pattern = re.compile("1[2]*3")  # 贪婪匹配
+        pattern = re.compile("(1[2]*3)|(4+)")  # 贪婪匹配
 
     result_file = f"../results/{args.res}"
     pred_file = f"../preds/{args.pred}"
@@ -149,7 +149,7 @@ def main():
         ENTS_LIST = defaultdict(list)
         # _get_res(cur_input_ids, cur_myinput_ids, cur_pred_ent, cur_pred_ent_conf, cur_pred_emo, cur_pred_emo_conf, ENTS_LIST)
         # _get_res(cur_input_ids, cur_myinput_ids, cur_pred_ent, "", cur_pred_emo, "", ENTS_LIST)
-        _get_res("", cur_myinput_ids, cur_pred_ent, "", cur_pred_emo, "", ENTS_LIST)
+        _get_res(pattern, "", cur_myinput_ids, cur_pred_ent, "", cur_pred_emo, "", ENTS_LIST)
 
         #################################################################
 

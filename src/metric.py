@@ -8,7 +8,6 @@ from collections import defaultdict, Counter
 ID2TOK = load_data("../datasets/ID2TOK.pkl")
 
 
-
 class FScore(Metric):
     """
     Calculates the top-k categorical accuracy.
@@ -17,7 +16,7 @@ class FScore(Metric):
     """
 
     def __init__(self, output_transform=lambda x: x, lbl_method="BIO"):
-        self.EMOS_MAP = {"0":"OTHER","1": "POS", "2": "NEG", "3": "NORM"}
+        self.EMOS_MAP = {"0": "OTHER", "1": "POS", "2": "NEG", "3": "NORM"}
         self.lbl_method = lbl_method
         self.ents = defaultdict(list)
         self.ents_pred = defaultdict(list)
@@ -25,6 +24,11 @@ class FScore(Metric):
         self.f1s_emo = []
         self.ones_pred = 0
         self.ones = 0
+        if self.lbl_method == "BIO":
+            self.pattern = re.compile("1[2]*")  # 贪婪匹配
+        else:
+            self.pattern = re.compile("(1[2]*3)|(4+)")  # 贪婪匹配
+        print(f"lbl_method: {self.lbl_method} pattern: {self.pattern}")
         # put the super in end!
         super(FScore, self).__init__(output_transform)
 
@@ -49,12 +53,9 @@ class FScore(Metric):
         y_ent = "".join([str(i.item()) for i in y_ent])
         y_pred_emo = "".join([str(i.item()) for i in y_pred_emo])
         y_emo = "".join([str(i.item()) for i in y_emo])
-        if self.lbl_method == "BIO":
-            pattern = re.compile("1[2]*")  # 贪婪匹配
-        else:
-            pattern = re.compile("1[2]*3")  # 贪婪匹配
-        self._find_ents(y_pred_ent, y_pred_emo, pattern, tokens, self.ents_pred, "pred")
-        self._find_ents(y_ent,y_emo, pattern, tokens, self.ents)
+
+        self._find_ents(y_pred_ent, y_pred_emo, self.pattern, tokens, self.ents_pred, "pred")
+        self._find_ents(y_ent, y_emo, self.pattern, tokens, self.ents)
         ENTS_PRED = {ent for ent in self.ents_pred}
         ENTS = {ent for ent in self.ents}
 
@@ -83,7 +84,7 @@ class FScore(Metric):
         print(f"F1_ent: {f1_ent_all}\tF1_emo: {f1_emo_all}")
         return 0.5 * (f1_ent_all + f1_emo_all)
 
-    def _find_ents(self, y_pred_ent,y_pred_emo, p, tokens, S, mode="lbl"):
+    def _find_ents(self, y_pred_ent, y_pred_emo, p, tokens, S, mode="lbl"):
         # 使用与取result一致的逻辑
         for r in p.finditer(y_pred_ent):
             i, j = r.span()[0], r.span()[1]

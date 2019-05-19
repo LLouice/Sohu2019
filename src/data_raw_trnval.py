@@ -41,11 +41,12 @@ def data2txt(data, mode="train", size="lite"):
             f.write("\n")
         f.write("\n")
         for content in contents:
-            for t, tO in zip(content[0], content[1]):
-                line = " ".join((t, tO))
-                f.write(line)
+            if len(content) > 0:
+                for t, tO in zip(content[0], content[1]):
+                    line = " ".join((t, tO))
+                    f.write(line)
+                    f.write("\n")
                 f.write("\n")
-            f.write("\n")
         # 下一新闻
         f.write("\n")
         count += 1

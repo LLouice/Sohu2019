@@ -80,7 +80,7 @@ def train():
         num_labels_ent = 3  # O B I
     else:
         num_labels_emo = 4 # O POS NEG NORM
-        num_labels_ent = 4  # O B I E
+        num_labels_ent = 5  # O B I E S
 
     if not args.freeze_step > 0:
         model = NetY3.from_pretrained(args.bert_model,
@@ -113,7 +113,7 @@ def train():
     if not args.multi:
         alpha = args.alpha
     else:
-        alphas = [1e-5, 1e-2, 1e-1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        alphas = [0.1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         print("alphas: ", " ".join(map(str, alphas)))
     # alphas = [2,1,1,0.8,0.8,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]
     # ------------------------------ load model from file -------------------------
@@ -490,10 +490,14 @@ if __name__ == '__main__':
                         type=int,
                         default=-1,
                         help="the step to val")
+    parser.add_argument("--eval_radio",
+                        type=float,
+                        default=-1,
+                        help="the step to val")
     parser.add_argument("--lbl_method",
                         type=str,
                         default="BIO",
-                        help="BIO / BIEO")
+                        help="BIO / BIEOS")
 
     args = parser.parse_args()
 
