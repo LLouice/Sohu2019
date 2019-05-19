@@ -13,7 +13,7 @@ from argparse import ArgumentParser
 os.chdir("../.")
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("--pred",
+    parser.add_argument("--pred_dir",
                         default="pred_5cv.h5",
                         type=str, required=False)
     parser.add_argument("--pred_avg",
@@ -21,26 +21,26 @@ if __name__ == '__main__':
                         type=str, required=False)
     args = parser.parse_args()
 
+    all_preds = os.listdir(args.pred_dir)
     fresult = h5py.File(f"../preds/{args.pred_avg}", "w")
-    f = h5py.File(f"../preds/{args.pred}", "r")
-    ent_raw = fresult.create_dataset("ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
-    emo_raw = fresult.create_dataset("emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
-    ent = fresult.create_dataset("ent", shape=(0, 128), maxshape=(None, 128), compression="gzip")
-    emo = fresult.create_dataset("emo", shape=(0, 128), maxshape=(None, 128), compression="gzip")
-
-    for cv in range(1, 6):
-        print('cv : {}'.format(cv))
-        if cv == 1:
-            pred_ent_conf = f.get(f"cv1/ent_raw")[()]
-            pred_emo_conf = f.get("cv1/emo_raw")[()]
+    ent_raw = fresult.create_dataset("ent_raw", shape=(0, 256, 5), maxshape=(None, 256, 5), compression="gzip")
+    emo_raw = fresult.create_dataset("emo_raw", shape=(0, 256, 4), maxshape=(None, 256, 4), compression="gzip")
+    ent = fresult.create_dataset("ent", shape=(0, 256), maxshape=(None, 256), compression="gzip")
+    emo = fresult.create_dataset("emo", shape=(0, 256), maxshape=(None, 256), compression="gzip")
+    for i, name in enumerate(all_preds):
+        f = h5py.File(os.path.join(args.pred_dir, f"{name}"), "r")
+        if i == 0:
+            pred_ent_conf = f.get("ent_raw")[()]
+            pred_emo_conf = f.get("emo_raw")[()]
         else:
-            pred_ent_cur = f.get(f"cv{cv}/ent_raw")[()]
-            pred_emo_cur = f.get(f"cv{cv}/emo_raw")[()]
+            pred_ent_cur = f.get(f"ent_raw")[()]
+            pred_emo_cur = f.get(f"emo_raw")[()]
             pred_ent_conf += pred_ent_cur
             pred_emo_conf += pred_emo_cur
+        f.close()
 
-    pred_ent_conf /= 5.0
-    pred_emo_conf /= 5.0
+    pred_ent_conf /= len(all_preds)
+    pred_emo_conf /= len(all_preds)
 
     pred_ent_t = torch.from_numpy(pred_ent_conf)
     pred_emo_t = torch.from_numpy(pred_emo_conf)
@@ -60,6 +60,5 @@ if __name__ == '__main__':
     emo_raw[...] = pred_emo_conf
     ent[...] = pred_ent
     emo[...] = pred_emo
-    f.close()
     fresult.close()
     print('over!')
