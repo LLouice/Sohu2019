@@ -70,7 +70,7 @@ def main():
     args = parser.parse_args()
     # ------------------------------------------------------------------------------
     # ------------------------------- output file ----------------------------------
-    if args.lab_method == "BIO":
+    if args.lbl_method == "BIO":
         pattern = re.compile("1[2]*")  # 贪婪匹配
     else:
         pattern = re.compile("(1[2]*3)|(4+)")  # 贪婪匹配
