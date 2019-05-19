@@ -148,7 +148,7 @@ def train():
             # O B I E S
             wc_ent = torch.tensor([0.5, 2, 1, 2, 2]).to(device)
             # O POS NEG NORM
-            wc_emo = torch.tesnor([0.5, 0.8, 1, 1]).to(device)
+            wc_emo = torch.tensor([0.5, 0.8, 1, 1]).to(device)
             criterion_ent = torch.nn.CrossEntropyLoss(weight=wc_ent)
             criterion_emo = torch.nn.CrossEntropyLoss(weight=wc_emo)
             print("weight classes over!")
