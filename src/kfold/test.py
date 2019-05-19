@@ -128,8 +128,13 @@ def run(test_dataloader, cv):
         f = h5py.File(f"../preds/{args.pred}", "w")
     else:
         f = h5py.File(f"../preds/{args.pred}", "r+")
-    ent_raw = f.create_dataset(f"cv{cv}/ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
-    emo_raw = f.create_dataset(f"cv{cv}/emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
+    if args.lbl_method == "BIO":
+        ent_raw = f.create_dataset(f"cv{cv}/ent_raw", shape=(0, 128, 3), maxshape=(None, 128, 3), compression="gzip")
+        emo_raw = f.create_dataset(f"cv{cv}/emo_raw", shape=(0, 128, 4), maxshape=(None, 128, 4), compression="gzip")
+    else:
+        ent_raw = f.create_dataset(f"cv{cv}/ent_raw", shape=(0, 256, 5), maxshape=(None, 256, 5), compression="gzip")
+        emo_raw = f.create_dataset(f"cv{cv}/emo_raw", shape=(0, 256, 4), maxshape=(None, 256, 4), compression="gzip")
+
 
     # ent = f.create_dataset(f"cv{cv}/ent", shape=(0, 128), maxshape=(None, 128), compression="gzip")
     # emo = f.create_dataset(f"cv{cv}/emo", shape=(0, 128), maxshape=(None, 128), compression="gzip")
