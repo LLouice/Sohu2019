@@ -19,8 +19,7 @@ from ignite.metrics import RunningAverage
 from ignite.contrib.handlers.tensorboard_logger import *
 from metric import FScore
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
-# from models import NetX3, NetX3_fz
-from models import NetY1, NetY2, NetY3, NetY3_fz
+from models import NetY1, NetY2, NetY3, NetY3_fz, NetY4
 from loss import FocalLoss
 
 
@@ -76,18 +75,38 @@ def get_data_loader():
 def train():
     ################################ Model Config ###################################
     if args.lbl_method == "BIO":
-        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_emo = 4  # O POS NEG NORM
         num_labels_ent = 3  # O B I
     else:
-        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_emo = 4  # O POS NEG NORM
         num_labels_ent = 5  # O B I E S
 
     if not args.freeze_step > 0:
-        model = NetY3.from_pretrained(args.bert_model,
-                                      cache_dir="",
-                                      num_labels_ent=num_labels_ent,
-                                      num_labels_emo=num_labels_emo,
-                                      dp=args.dp)
+        if args.net == "3":
+            model = NetY3.from_pretrained(args.bert_model,
+                                          cache_dir="",
+                                          num_labels_ent=num_labels_ent,
+                                          num_labels_emo=num_labels_emo,
+                                          dp=args.dp)
+        elif args.net == "2":
+            model = NetY2.from_pretrained(args.bert_model,
+                                          cache_dir="",
+                                          num_labels_ent=num_labels_ent,
+                                          num_labels_emo=num_labels_emo,
+                                          dp=args.dp)
+        elif args.net == "1":
+            model = NetY1.from_pretrained(args.bert_model,
+                                          cache_dir="",
+                                          num_labels_ent=num_labels_ent,
+                                          num_labels_emo=num_labels_emo,
+                                          dp=args.dp)
+        elif args.net == "4":
+            model = NetY4.from_pretrained(args.bert_model,
+                                          cache_dir="",
+                                          num_labels_ent=num_labels_ent,
+                                          num_labels_emo=num_labels_emo,
+                                          dp=args.dp)
+
     else:
         model = NetY3_fz.from_pretrained(args.bert_model,
                                          cache_dir="",
@@ -143,7 +162,7 @@ def train():
     ######################################################################
     if not args.focal:
         if not args.wc:
-             criterion = torch.nn.CrossEntropyLoss()
+            criterion = torch.nn.CrossEntropyLoss()
         else:
             # O B I E S
             wc_ent = torch.tensor([0.5, 2, 1, 2, 2]).to(device)
@@ -210,7 +229,7 @@ def train():
         input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
 
         with torch.no_grad():
-            act_logits_ent, act_y_ent, act_logits_emo, act_y_emo,  act_myinput_ids = model(
+            act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids = model(
                 input_ids, myinput_ids, segment_ids,
                 input_mask,
                 label_ent_ids, label_emo_ids)
@@ -516,6 +535,10 @@ if __name__ == '__main__':
     parser.add_argument("--wc",
                         action="store_true",
                         help="weight class")
+    parser.add_argument("--net",
+                        type=str,
+                        default="3",
+                        help="model")
 
     args = parser.parse_args()
 

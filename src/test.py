@@ -5,7 +5,7 @@ import torch
 from ignite.engine import Engine, Events
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from torch.utils.data import DataLoader, SequentialSampler, TensorDataset
-from models import NetY3
+from models import NetY3, NetY1, NetY2, NetY3_fz, NetY4
 
 
 def get_test_dataloader():
@@ -29,16 +29,36 @@ def get_test_dataloader():
 def run():
     ################################ Model Config ###################################
     if args.lbl_method == "BIO":
-        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_emo = 4  # O POS NEG NORM
         num_labels_ent = 3  # O B I
     else:
-        num_labels_emo = 4 # O POS NEG NORM
+        num_labels_emo = 4  # O POS NEG NORM
         num_labels_ent = 5  # O B I E S
-    model = NetY3.from_pretrained(args.bert_model,
-                                  cache_dir="",
-                                  num_labels_ent=num_labels_ent,
-                                  num_labels_emo=num_labels_emo,
-                                  dp=0.2)
+
+    if args.net == "3":
+        model = NetY3.from_pretrained(args.bert_model,
+                                      cache_dir="",
+                                      num_labels_ent=num_labels_ent,
+                                      num_labels_emo=num_labels_emo,
+                                      dp=args.dp)
+    elif args.net == "2":
+        model = NetY2.from_pretrained(args.bert_model,
+                                      cache_dir="",
+                                      num_labels_ent=num_labels_ent,
+                                      num_labels_emo=num_labels_emo,
+                                      dp=args.dp)
+    elif args.net == "1":
+        model = NetY1.from_pretrained(args.bert_model,
+                                      cache_dir="",
+                                      num_labels_ent=num_labels_ent,
+                                      num_labels_emo=num_labels_emo,
+                                      dp=args.dp)
+    elif args.net == "4":
+        model = NetY4.from_pretrained(args.bert_model,
+                                      cache_dir="",
+                                      num_labels_ent=num_labels_ent,
+                                      num_labels_emo=num_labels_emo,
+                                      dp=args.dp)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -81,7 +101,6 @@ def run():
             emo_raw = f.create_dataset("emo_raw", shape=(0, 256, 4), maxshape=(None, 256, 4), compression="gzip")
         ent = f.create_dataset("ent", shape=(0, 256), maxshape=(None, 256), compression="gzip")
         emo = f.create_dataset("emo", shape=(0, 256), maxshape=(None, 256), compression="gzip")
-
 
     @tester.on(Events.ITERATION_COMPLETED)
     def get_test_pred(engine):
@@ -173,7 +192,10 @@ if __name__ == '__main__':
                         type=str,
                         default="BIO",
                         help="BIO / BIEO")
-
+    parser.add_argument("--net",
+                        type=str,
+                        default="3",
+                        help="model")
     args = parser.parse_args()
 
     run()
