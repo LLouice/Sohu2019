@@ -174,64 +174,35 @@ def train():
     else:
         criterion = FocalLoss(args.gamma)
 
-    iterations = None
+    if args.lf:
+        print("lr finding.........")
+        import math
+        init_value = 1e-8
+        final_value = 10
+        beta = 0.98
+        num = len(trn_dataloader) - 1
+        mult = (final_value / init_value) ** (1 / num)
+        lr = init_value
+        optimizer.param_groups[0]['lr'] = lr
+        optimizer.param_groups[1]['lr'] = lr
+        optimizer.param_groups[0]['lr'] = lr
+        optimizer.param_groups[1]['lr'] = lr
 
-    def step(engine, batch):
-        if args.freeze_step > 0:
-            if engine.state.epoch - 1 == args.freeze_step:
-                freeze_paras = model.module.unfreeze()
-                # opt unfreeze
-                optimizer.add_param_group({'params': freeze_paras})
-                # run only once
-                args.freeze_step = -1
-        if args.eval_radio > 0:
-            global iterations
-            iterations = len(trn_dataloader) // len(batch)
+        def lr_find(engine, batch):
+            batch_num = engine.state.iteration
+            if engine.state.metrics.get("avg_loss") is None:
+                engine.state.metrics["avg_loss"] = 0.
+                engine.state.metrics["best_loss"] = 0.
+                engine.state.metrics["lr"] = lr
+                engine.state.metrics["losses"] = []
+                engine.state.metrics["log_lrs"] = []
+            model.train()
+            batch = tuple(t.to(device) for t in batch)
+            input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
 
-        model.train()
-        batch = tuple(t.to(device) for t in batch)
-        input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
-
-        optimizer.zero_grad()
-        act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids = model(
-            input_ids, myinput_ids, segment_ids, input_mask,
-            label_ent_ids, label_emo_ids)
-        # Only keep active parts of the loss
-        if not args.wc:
-            loss_ent = criterion(act_logits_ent, act_y_ent)
-            loss_emo = criterion(act_logits_emo, act_y_emo)
-        else:
-            loss_ent = criterion_ent(act_logits_ent, act_y_ent)
-            loss_emo = criterion_emo(act_logits_emo, act_y_emo)
-        # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
-        if not args.multi:
-            loss = alpha * loss_ent + loss_emo
-        else:
-            loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
-        if engine.state.metrics.get("total_loss") is None:
-            engine.state.metrics["total_loss"] = loss.item()
-            engine.state.metrics["ent_loss"] = loss_ent.item()
-            engine.state.metrics["emo_loss"] = loss_emo.item()
-        else:
-            engine.state.metrics["total_loss"] += loss.item()
-            engine.state.metrics["ent_loss"] += loss_ent.item()
-            engine.state.metrics["emo_loss"] += loss_emo.item()
-        engine.state.metrics["batchloss"] = loss.item()
-        engine.state.metrics["batchloss_ent"] = loss_ent.item()
-        engine.state.metrics["batchloss_emo"] = loss_emo.item()
-        loss.backward()
-        optimizer.step()
-        return loss.item(), act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids  # [-1, 11]
-
-    def infer(engine, batch):
-        model.eval()
-        batch = tuple(t.to(device) for t in batch)
-        input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
-
-        with torch.no_grad():
+            optimizer.zero_grad()
             act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids = model(
-                input_ids, myinput_ids, segment_ids,
-                input_mask,
+                input_ids, myinput_ids, segment_ids, input_mask,
                 label_ent_ids, label_emo_ids)
             # Only keep active parts of the loss
             if not args.wc:
@@ -245,7 +216,77 @@ def train():
                 loss = alpha * loss_ent + loss_emo
             else:
                 loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
+            # Compute the smoothed loss
+            avg_loss = beta * engine.state.metrics.get("avg_loss") + (1 - beta) * loss.item()
+            smoothed_loss = avg_loss / (1 - beta ** batch_num)
+            engine.state.metrics["avg_loss"] = avg_loss
+            # Stop if the loss is exploding
+            if batch_num > 1 and smoothed_loss > 4 * engine.state.metrics.get("best_loss") or torch.isnan(torch.tensor(smoothed_loss)):
+                # engine.terminate()
+                engine.terminate_epoch()
+            # Record the best loss
+            if smoothed_loss < engine.state.metrics.get("best_loss") or batch_num == 1:
+                best_loss = smoothed_loss
+                engine.state.metrics["best_loss"] = best_loss
+            # print("cur batch:{} smothed_loss: {} best_loss: {} ".format(batch_num, smoothed_loss, engine.state.metrics["best_loss"]))
+            # Store the values
+            engine.state.metrics["losses"].append(smoothed_loss)
+            engine.state.metrics["log_lrs"].append(math.log10(engine.state.metrics["lr"]))
+            # Do the SGD step
+            loss.backward()
+            optimizer.step()
+            # Update the lr for the next step
+            engine.state.metrics["lr"] *= mult
+            optimizer.param_groups[0]['lr'] = engine.state.metrics["lr"]
+            optimizer.param_groups[1]['lr'] = engine.state.metrics["lr"]
 
+        trn_lr_fineder = Engine(lr_find)
+
+        @trn_lr_fineder.on(Events.EPOCH_COMPLETED)
+        def draw_lr(engine):
+            import matplotlib.pyplot as plt
+            plt.plot(engine.state.metrics.get("log_lrs")[10:-5], engine.state.metrics.get("losses")[10:-5])
+            plt.savefig("lr_finder.jpg")
+            print("lr find end!")
+
+        pbar = ProgressBar(persist=True)
+        pbar.attach(trn_lr_fineder)
+        trn_lr_fineder.run(trn_dataloader, max_epochs=1)
+    else:
+        iterations = None
+
+        def step(engine, batch):
+            if args.freeze_step > 0:
+                if engine.state.epoch - 1 == args.freeze_step:
+                    freeze_paras = model.module.unfreeze()
+                    # opt unfreeze
+                    optimizer.add_param_group({'params': freeze_paras})
+                    # run only once
+                    args.freeze_step = -1
+            if args.eval_radio > 0:
+                global iterations
+                iterations = len(trn_dataloader) // len(batch)
+
+            model.train()
+            batch = tuple(t.to(device) for t in batch)
+            input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
+
+            optimizer.zero_grad()
+            act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids = model(
+                input_ids, myinput_ids, segment_ids, input_mask,
+                label_ent_ids, label_emo_ids)
+            # Only keep active parts of the loss
+            if not args.wc:
+                loss_ent = criterion(act_logits_ent, act_y_ent)
+                loss_emo = criterion(act_logits_emo, act_y_emo)
+            else:
+                loss_ent = criterion_ent(act_logits_ent, act_y_ent)
+                loss_emo = criterion_emo(act_logits_emo, act_y_emo)
+            # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
+            if not args.multi:
+                loss = alpha * loss_ent + loss_emo
+            else:
+                loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
             if engine.state.metrics.get("total_loss") is None:
                 engine.state.metrics["total_loss"] = loss.item()
                 engine.state.metrics["ent_loss"] = loss_ent.item()
@@ -257,209 +298,246 @@ def train():
             engine.state.metrics["batchloss"] = loss.item()
             engine.state.metrics["batchloss_ent"] = loss_ent.item()
             engine.state.metrics["batchloss_emo"] = loss_emo.item()
-        # act_logits = torch.argmax(torch.softmax(act_logits, dim=-1), dim=-1)  # [-1, 1]
-        # loss = loss.mean()
-        return loss.item(), act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids  # [-1, 11]
+            loss.backward()
+            optimizer.step()
+            return loss.item(), act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids  # [-1, 11]
 
-    trainer = Engine(step)
-    trn_evaluator = Engine(infer)
-    val_evaluator = Engine(infer)
-    val_evaluator_iteration = Engine(infer)
+        def infer(engine, batch):
+            model.eval()
+            batch = tuple(t.to(device) for t in batch)
+            input_ids, myinput_ids, input_mask, segment_ids, label_ent_ids, label_emo_ids = batch
 
-    ############################## Custom Period Event ###################################
-    '''
-        cpe1 = CustomPeriodicEvent(n_epochs=1)
-        cpe1.attach(trainer)
-        cpe2 = CustomPeriodicEvent(n_epochs=2)
-        cpe2.attach(trainer)
-        cpe3 = CustomPeriodicEvent(n_epochs=3)
-        cpe3.attach(trainer)
-        cpe5 = CustomPeriodicEvent(n_epochs=5)
-        cpe5.attach(trainer)
-    '''
-    if args.eval_step > 0:
-        cpe = CustomPeriodicEvent(n_iterations=args.eval_step)
-        cpe.attach(trainer)
-    if args.eval_radio > 0:
-        cpe2 = CustomPeriodicEvent(n_iterations=iterations * args.eval_radio + 1)
-        cpe2.attach(trainer)
+            with torch.no_grad():
+                act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids = model(
+                    input_ids, myinput_ids, segment_ids,
+                    input_mask,
+                    label_ent_ids, label_emo_ids)
+                # Only keep active parts of the loss
+                if not args.wc:
+                    loss_ent = criterion(act_logits_ent, act_y_ent)
+                    loss_emo = criterion(act_logits_emo, act_y_emo)
+                else:
+                    loss_ent = criterion_ent(act_logits_ent, act_y_ent)
+                    loss_emo = criterion_emo(act_logits_emo, act_y_emo)
+                # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
+                if not args.multi:
+                    loss = alpha * loss_ent + loss_emo
+                else:
+                    loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
 
-    ############################## My F1 ###################################
-    F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]], lbl_method=args.lbl_method)
-    F1.attach(val_evaluator, "F1")
-    F1.attach(val_evaluator_iteration, "F1")
+                if engine.state.metrics.get("total_loss") is None:
+                    engine.state.metrics["total_loss"] = loss.item()
+                    engine.state.metrics["ent_loss"] = loss_ent.item()
+                    engine.state.metrics["emo_loss"] = loss_emo.item()
+                else:
+                    engine.state.metrics["total_loss"] += loss.item()
+                    engine.state.metrics["ent_loss"] += loss_ent.item()
+                    engine.state.metrics["emo_loss"] += loss_emo.item()
+                engine.state.metrics["batchloss"] = loss.item()
+                engine.state.metrics["batchloss_ent"] = loss_ent.item()
+                engine.state.metrics["batchloss_emo"] = loss_emo.item()
+            # act_logits = torch.argmax(torch.softmax(act_logits, dim=-1), dim=-1)  # [-1, 1]
+            # loss = loss.mean()
+            return loss.item(), act_logits_ent, act_y_ent, act_logits_emo, act_y_emo, act_myinput_ids  # [-1, 11]
 
-    #####################################  progress bar #########################
-    RunningAverage(output_transform=lambda x: x[0]).attach(trainer, 'batch_loss')
-    pbar = ProgressBar(persist=True)
-    pbar.attach(trainer, metric_names=["batch_loss"])
+        trainer = Engine(step)
+        trn_evaluator = Engine(infer)
+        val_evaluator = Engine(infer)
+        val_evaluator_iteration = Engine(infer)
 
-    #####################################  Evaluate #########################
-    @trainer.on(Events.EPOCH_COMPLETED)
-    def compute_val_metric(engine):
-        # trainer engine
-        engine.state.metrics["total_loss"] /= engine.state.iteration
-        engine.state.metrics["ent_loss"] /= engine.state.iteration
-        engine.state.metrics["emo_loss"] /= engine.state.iteration
-        pbar.log_message(
-            "Training - total_loss: {:.4f} ent_loss: {:.4f} emo_loss: {:.4f}".format(engine.state.metrics["total_loss"],
-                                                                                     engine.state.metrics["ent_loss"],
-                                                                                     engine.state.metrics["emo_loss"]))
-        val_evaluator.run(val_dataloader)
+        ############################## Custom Period Event ###################################
+        '''
+            cpe1 = CustomPeriodicEvent(n_epochs=1)
+            cpe1.attach(trainer)
+            cpe2 = CustomPeriodicEvent(n_epochs=2)
+            cpe2.attach(trainer)
+            cpe3 = CustomPeriodicEvent(n_epochs=3)
+            cpe3.attach(trainer)
+            cpe5 = CustomPeriodicEvent(n_epochs=5)
+            cpe5.attach(trainer)
+        '''
+        if args.eval_step > 0:
+            cpe = CustomPeriodicEvent(n_iterations=args.eval_step)
+            cpe.attach(trainer)
+        if args.eval_radio > 0:
+            cpe2 = CustomPeriodicEvent(n_iterations=iterations * args.eval_radio + 1)
+            cpe2.attach(trainer)
 
-        metrics = val_evaluator.state.metrics
-        ent_loss = metrics["ent_loss"]
-        emo_loss = metrics["emo_loss"]
-        f1 = metrics['F1']
-        pbar.log_message(
-            "Validation Results - Epoch: {}  Ent_loss: {:.4f}, Emo_loss: {:.4f}, F1: {:.4f}"
-                .format(engine.state.epoch, ent_loss, emo_loss, f1))
+        ############################## My F1 ###################################
+        F1 = FScore(output_transform=lambda x: [x[1], x[2], x[3], x[4], x[-1]], lbl_method=args.lbl_method)
+        F1.attach(val_evaluator, "F1")
+        F1.attach(val_evaluator_iteration, "F1")
 
-        pbar.n = pbar.last_print_n = 0
-        # trainer.add_event_handler(Events.EPOCH_COMPLETED, compute_val_metric)
+        #####################################  progress bar #########################
+        RunningAverage(output_transform=lambda x: x[0]).attach(trainer, 'batch_loss')
+        pbar = ProgressBar(persist=True)
+        pbar.attach(trainer, metric_names=["batch_loss"])
 
-    def compute_val_metric_iteration(engine):
-        # trainer engine
-        val_evaluator_iteration.run(val_dataloader)
-        metrics = val_evaluator_iteration.state.metrics
-        f1 = metrics['F1']
-        pbar.log_message(
-            "Validation Results - Iteration: {} F1: {:.4f}"
-                .format(engine.state.iteration, f1))
-        pbar.n = pbar.last_print_n = 0
+        #####################################  Evaluate #########################
+        @trainer.on(Events.EPOCH_COMPLETED)
+        def compute_val_metric(engine):
+            # trainer engine
+            engine.state.metrics["total_loss"] /= engine.state.iteration
+            engine.state.metrics["ent_loss"] /= engine.state.iteration
+            engine.state.metrics["emo_loss"] /= engine.state.iteration
+            pbar.log_message(
+                "Training - total_loss: {:.4f} ent_loss: {:.4f} emo_loss: {:.4f}".format(
+                    engine.state.metrics["total_loss"],
+                    engine.state.metrics["ent_loss"],
+                    engine.state.metrics["emo_loss"]))
+            val_evaluator.run(val_dataloader)
 
-    if args.eval_step > 0:
-        trainer.add_event_handler(eval(f"cpe.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
-                                  compute_val_metric_iteration)
-    if args.eval_radio > 0:
-        trainer.add_event_handler(eval(f"cpe2.Events.ITERATIONS_{iterations * args.eval_radio + 1}_COMPLETED"),
-                                  compute_val_metric_iteration)
+            metrics = val_evaluator.state.metrics
+            ent_loss = metrics["ent_loss"]
+            emo_loss = metrics["emo_loss"]
+            f1 = metrics['F1']
+            pbar.log_message(
+                "Validation Results - Epoch: {}  Ent_loss: {:.4f}, Emo_loss: {:.4f}, F1: {:.4f}"
+                    .format(engine.state.epoch, ent_loss, emo_loss, f1))
 
-    @val_evaluator.on(Events.EPOCH_COMPLETED)
-    def reduct_step(engine):
-        engine.state.metrics["total_loss"] /= engine.state.iteration
-        engine.state.metrics["ent_loss"] /= engine.state.iteration
-        engine.state.metrics["emo_loss"] /= engine.state.iteration
-        pbar.log_message(
-            "Validation - total_loss: {:.4f} ent_loss: {:.4f} emo_loss: {:.4f}".format(
-                engine.state.metrics["total_loss"],
-                engine.state.metrics["ent_loss"],
-                engine.state.metrics["emo_loss"]))
+            pbar.n = pbar.last_print_n = 0
+            # trainer.add_event_handler(Events.EPOCH_COMPLETED, compute_val_metric)
 
-    ######################################################################
+        def compute_val_metric_iteration(engine):
+            # trainer engine
+            val_evaluator_iteration.run(val_dataloader)
+            metrics = val_evaluator_iteration.state.metrics
+            f1 = metrics['F1']
+            pbar.log_message(
+                "Validation Results - Iteration: {} F1: {:.4f}"
+                    .format(engine.state.iteration, f1))
+            pbar.n = pbar.last_print_n = 0
 
-    ############################## checkpoint ###################################
-    def best_f1(engine):
-        f1 = engine.state.metrics["F1"]
-        # loss = engine.state.metrics["loss"]
-        return f1
+        if args.eval_step > 0:
+            trainer.add_event_handler(eval(f"cpe.Events.ITERATIONS_{args.eval_step}_COMPLETED"),
+                                      compute_val_metric_iteration)
+        if args.eval_radio > 0:
+            trainer.add_event_handler(eval(f"cpe2.Events.ITERATIONS_{iterations * args.eval_radio + 1}_COMPLETED"),
+                                      compute_val_metric_iteration)
 
-    if not args.lite:
-        ckp_dir = os.path.join(args.checkpoint_model_dir, "full", args.hyper_cfg)
-    else:
-        ckp_dir = os.path.join(args.checkpoint_model_dir, "lite", args.hyper_cfg)
-    checkpoint_handler = ModelCheckpoint(ckp_dir,
-                                         'ckp',
-                                         # save_interval=args.checkpoint_interval,
-                                         score_function=best_f1,
-                                         score_name="F1",
-                                         n_saved=5,
-                                         require_empty=False, create_dir=True)
+        @val_evaluator.on(Events.EPOCH_COMPLETED)
+        def reduct_step(engine):
+            engine.state.metrics["total_loss"] /= engine.state.iteration
+            engine.state.metrics["ent_loss"] /= engine.state.iteration
+            engine.state.metrics["emo_loss"] /= engine.state.iteration
+            pbar.log_message(
+                "Validation - total_loss: {:.4f} ent_loss: {:.4f} emo_loss: {:.4f}".format(
+                    engine.state.metrics["total_loss"],
+                    engine.state.metrics["ent_loss"],
+                    engine.state.metrics["emo_loss"]))
 
-    # trainer.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
-    #                           to_save={'model_3FC': model})
-    val_evaluator.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
-                                    to_save={'model_title': model})
-    if args.eval_step > 0:
-        val_evaluator_iteration.add_event_handler(event_name=Events.EPOCH_COMPLETED,
-                                                  handler=checkpoint_handler, to_save={"model_iter": model})
+        ######################################################################
 
-    ######################################################################
+        ############################## checkpoint ###################################
+        def best_f1(engine):
+            f1 = engine.state.metrics["F1"]
+            # loss = engine.state.metrics["loss"]
+            return f1
 
-    ############################## earlystopping ###################################
-    stopping_handler = EarlyStopping(patience=2, score_function=best_f1, trainer=trainer)
-    val_evaluator.add_event_handler(Events.COMPLETED, stopping_handler)
+        if not args.lite:
+            ckp_dir = os.path.join(args.checkpoint_model_dir, "full", args.hyper_cfg)
+        else:
+            ckp_dir = os.path.join(args.checkpoint_model_dir, "lite", args.hyper_cfg)
+        checkpoint_handler = ModelCheckpoint(ckp_dir,
+                                             'ckp',
+                                             # save_interval=args.checkpoint_interval,
+                                             score_function=best_f1,
+                                             score_name="F1",
+                                             n_saved=5,
+                                             require_empty=False, create_dir=True)
 
-    ######################################################################
+        # trainer.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
+        #                           to_save={'model_3FC': model})
+        val_evaluator.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=checkpoint_handler,
+                                        to_save={'model_title': model})
+        if args.eval_step > 0:
+            val_evaluator_iteration.add_event_handler(event_name=Events.EPOCH_COMPLETED,
+                                                      handler=checkpoint_handler, to_save={"model_iter": model})
 
-    #################################### tb logger ##################################
-    # 在已经在对应基础上计算了 metric 的值 (compute_metric) 后 取值 log
-    if not args.lite:
-        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "full", args.hyper_cfg))
-    else:
-        tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "lite", args.hyper_cfg))
+        ######################################################################
 
-    '''
-    tb_logger.attach(trainer,
-                     log_handler=OutputHandler(tag="training", output_transform=lambda x: {'batchloss': x[0]}),
-                     event_name=Events.ITERATION_COMPLETED)
+        ############################## earlystopping ###################################
+        stopping_handler = EarlyStopping(patience=2, score_function=best_f1, trainer=trainer)
+        val_evaluator.add_event_handler(Events.COMPLETED, stopping_handler)
 
-    tb_logger.attach(val_evaluator,
-                     log_handler=OutputHandler(tag="validation", output_transform=lambda x: {'batchloss': x[0]}),
-                     event_name=Events.ITERATION_COMPLETED)
-    '''
-    tb_logger.attach(trainer,
-                     log_handler=OutputHandler(tag="training",
-                                               metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
-                     event_name=Events.ITERATION_COMPLETED)
+        ######################################################################
 
-    tb_logger.attach(val_evaluator,
-                     log_handler=OutputHandler(tag="validation",
-                                               metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
-                     event_name=Events.ITERATION_COMPLETED)
-    tb_logger.attach(trainer,
-                     log_handler=OutputHandler(tag="training", metric_names=["total_loss", "ent_loss", "emo_loss"]),
-                     event_name=Events.EPOCH_COMPLETED)
-    # tb_logger.attach(trainer,
-    #                  log_handler=OutputHandler(tag="training", output_transform=lambda x: {'loss': x[0]}),
-    #                  event_name=Events.EPOCH_COMPLETED)
+        #################################### tb logger ##################################
+        # 在已经在对应基础上计算了 metric 的值 (compute_metric) 后 取值 log
+        if not args.lite:
+            tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "full", args.hyper_cfg))
+        else:
+            tb_logger = TensorboardLogger(log_dir=os.path.join(args.log_dir, "lite", args.hyper_cfg))
 
-    '''
-    tb_logger.attach(trn_evaluator,
-                     log_handler=OutputHandler(tag="training",
-                                               metric_names=["F1"],
-                                               another_engine=trainer),
-                     event_name=Events.EPOCH_COMPLETED)
+        '''
+        tb_logger.attach(trainer,
+                         log_handler=OutputHandler(tag="training", output_transform=lambda x: {'batchloss': x[0]}),
+                         event_name=Events.ITERATION_COMPLETED)
+    
+        tb_logger.attach(val_evaluator,
+                         log_handler=OutputHandler(tag="validation", output_transform=lambda x: {'batchloss': x[0]}),
+                         event_name=Events.ITERATION_COMPLETED)
+        '''
+        tb_logger.attach(trainer,
+                         log_handler=OutputHandler(tag="training",
+                                                   metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
+                         event_name=Events.ITERATION_COMPLETED)
 
-    '''
-    tb_logger.attach(val_evaluator,
-                     log_handler=OutputHandler(tag="validation",
-                                               metric_names=["total_loss", "ent_loss", "emo_loss", "F1"],
-                                               another_engine=trainer),
-                     event_name=Events.EPOCH_COMPLETED)
+        tb_logger.attach(val_evaluator,
+                         log_handler=OutputHandler(tag="validation",
+                                                   metric_names=["batchloss", "batchloss_ent", "batchloss_emo"]),
+                         event_name=Events.ITERATION_COMPLETED)
+        tb_logger.attach(trainer,
+                         log_handler=OutputHandler(tag="training", metric_names=["total_loss", "ent_loss", "emo_loss"]),
+                         event_name=Events.EPOCH_COMPLETED)
+        # tb_logger.attach(trainer,
+        #                  log_handler=OutputHandler(tag="training", output_transform=lambda x: {'loss': x[0]}),
+        #                  event_name=Events.EPOCH_COMPLETED)
 
-    if args.eval_step > 0:
-        tb_logger.attach(val_evaluator_iteration,
-                         log_handler=OutputHandler(tag="validation_iteration",
+        '''
+        tb_logger.attach(trn_evaluator,
+                         log_handler=OutputHandler(tag="training",
                                                    metric_names=["F1"],
                                                    another_engine=trainer),
                          event_name=Events.EPOCH_COMPLETED)
+    
+        '''
+        tb_logger.attach(val_evaluator,
+                         log_handler=OutputHandler(tag="validation",
+                                                   metric_names=["total_loss", "ent_loss", "emo_loss", "F1"],
+                                                   another_engine=trainer),
+                         event_name=Events.EPOCH_COMPLETED)
 
-    tb_logger.attach(trainer,
-                     log_handler=OptimizerParamsHandler(optimizer, "lr"),
-                     event_name=Events.EPOCH_COMPLETED)
-    '''
+        if args.eval_step > 0:
+            tb_logger.attach(val_evaluator_iteration,
+                             log_handler=OutputHandler(tag="validation_iteration",
+                                                       metric_names=["F1"],
+                                                       another_engine=trainer),
+                             event_name=Events.EPOCH_COMPLETED)
 
-    tb_logger.attach(trainer,
-                     log_handler=WeightsScalarHandler(model),
-                     event_name=Events.ITERATION_COMPLETED)
-
-    tb_logger.attach(trainer,
-                     log_handler=WeightsHistHandler(model),
-                     event_name=Events.EPOCH_COMPLETED)
-
-    # tb_logger.attach(trainer,
-    #                  log_handler=GradsScalarHandler(model),
-    #                  event_name=Events.ITERATION_COMPLETED)
-
-    tb_logger.attach(trainer,
-                     log_handler=GradsHistHandler(model),
-                     event_name=Events.EPOCH_COMPLETED)
-    '''
-
-    # lr_find()
-    trainer.run(trn_dataloader, max_epochs=args.epochs)
-    tb_logger.close()
+        tb_logger.attach(trainer,
+                         log_handler=OptimizerParamsHandler(optimizer, "lr"),
+                         event_name=Events.EPOCH_COMPLETED)
+        '''
+    
+        tb_logger.attach(trainer,
+                         log_handler=WeightsScalarHandler(model),
+                         event_name=Events.ITERATION_COMPLETED)
+    
+        tb_logger.attach(trainer,
+                         log_handler=WeightsHistHandler(model),
+                         event_name=Events.EPOCH_COMPLETED)
+    
+        # tb_logger.attach(trainer,
+        #                  log_handler=GradsScalarHandler(model),
+        #                  event_name=Events.ITERATION_COMPLETED)
+    
+        tb_logger.attach(trainer,
+                         log_handler=GradsHistHandler(model),
+                         event_name=Events.EPOCH_COMPLETED)
+        '''
+        trainer.run(trn_dataloader, max_epochs=args.epochs)
+        tb_logger.close()
 
 
 if __name__ == '__main__':
@@ -539,6 +617,12 @@ if __name__ == '__main__':
                         type=str,
                         default="3",
                         help="model")
+    parser.add_argument("--lf",
+                        action="store_true",
+                        help="lr finder")
+    parser.add_argument("--smooth",
+                        action="store_true",
+                        help="use smooth loss")
 
     args = parser.parse_args()
 
