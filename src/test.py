@@ -185,6 +185,10 @@ if __name__ == '__main__':
     parser.add_argument("--pred",
                         default="pred_new.h5",
                         type=str, required=False)
+    parser.add_argument("--dp",
+                        default=0.1,
+                        type=float,
+                        help="")
     parser.add_argument("--raw",
                         action="store_true",
                         help="是否存储置信度")

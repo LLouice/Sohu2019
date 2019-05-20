@@ -278,7 +278,6 @@ def train():
                 label_ent_ids, label_emo_ids)
             # Only keep active parts of the loss
             if not args.wc:
-
                 loss_ent = criterion(act_logits_ent, act_y_ent)
                 loss_emo = criterion(act_logits_emo, act_y_emo)
             else:
