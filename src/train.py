@@ -221,7 +221,8 @@ def train():
             smoothed_loss = avg_loss / (1 - beta ** batch_num)
             engine.state.metrics["avg_loss"] = avg_loss
             # Stop if the loss is exploding
-            if batch_num > 1 and smoothed_loss > 4 * engine.state.metrics.get("best_loss") or torch.isnan(torch.tensor(smoothed_loss)):
+            if batch_num > 1 and smoothed_loss > 4 * engine.state.metrics.get("best_loss") or torch.isnan(
+                    torch.tensor(smoothed_loss)):
                 # engine.terminate()
                 engine.terminate_epoch()
             # Record the best loss
@@ -277,16 +278,28 @@ def train():
                 label_ent_ids, label_emo_ids)
             # Only keep active parts of the loss
             if not args.wc:
+
                 loss_ent = criterion(act_logits_ent, act_y_ent)
                 loss_emo = criterion(act_logits_emo, act_y_emo)
             else:
                 loss_ent = criterion_ent(act_logits_ent, act_y_ent)
                 loss_emo = criterion_emo(act_logits_emo, act_y_emo)
             # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
-            if not args.multi:
-                loss = alpha * loss_ent + loss_emo
+            if not args.smooth_beta > 0:
+                if not args.multi:
+                    loss = alpha * loss_ent + loss_emo
+                else:
+                    loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
             else:
-                loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
+                if not args.multi:
+                    loss = alpha * loss_ent + loss_emo
+                else:
+                    loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
+                if engine.state.metrics.get("smooth_loss"):
+                    loss = loss * (1-args.smooth_beta) +  args.smooth_beta * engine.state.metrics[
+                        "smooth_loss"]
+
+
             if engine.state.metrics.get("total_loss") is None:
                 engine.state.metrics["total_loss"] = loss.item()
                 engine.state.metrics["ent_loss"] = loss_ent.item()
@@ -295,6 +308,7 @@ def train():
                 engine.state.metrics["total_loss"] += loss.item()
                 engine.state.metrics["ent_loss"] += loss_ent.item()
                 engine.state.metrics["emo_loss"] += loss_emo.item()
+            engine.state.metrics["smooth_loss"] = loss
             engine.state.metrics["batchloss"] = loss.item()
             engine.state.metrics["batchloss_ent"] = loss_ent.item()
             engine.state.metrics["batchloss_emo"] = loss_emo.item()
@@ -320,10 +334,19 @@ def train():
                     loss_ent = criterion_ent(act_logits_ent, act_y_ent)
                     loss_emo = criterion_emo(act_logits_emo, act_y_emo)
                 # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
-                if not args.multi:
-                    loss = alpha * loss_ent + loss_emo
+                if not args.smooth_beta > 0:
+                    if not args.multi:
+                        loss = alpha * loss_ent + loss_emo
+                    else:
+                        loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
                 else:
-                    loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
+                    if not args.multi:
+                        loss = alpha * loss_ent + loss_emo
+                    else:
+                        loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
+                    if engine.state.metrics.get("smooth_loss"):
+                        loss = loss * (1 - args.smooth_beta) + args.smooth_beta * engine.state.metrics[
+                            "smooth_loss"]
 
                 if engine.state.metrics.get("total_loss") is None:
                     engine.state.metrics["total_loss"] = loss.item()
@@ -333,6 +356,7 @@ def train():
                     engine.state.metrics["total_loss"] += loss.item()
                     engine.state.metrics["ent_loss"] += loss_ent.item()
                     engine.state.metrics["emo_loss"] += loss_emo.item()
+                engine.state.metrics["smooth_loss"] = loss
                 engine.state.metrics["batchloss"] = loss.item()
                 engine.state.metrics["batchloss_ent"] = loss_ent.item()
                 engine.state.metrics["batchloss_emo"] = loss_emo.item()
@@ -620,8 +644,9 @@ if __name__ == '__main__':
     parser.add_argument("--lf",
                         action="store_true",
                         help="lr finder")
-    parser.add_argument("--smooth",
-                        action="store_true",
+    parser.add_argument("--smooth_beta",
+                        type=float,
+                        default=-1,
                         help="use smooth loss")
 
     args = parser.parse_args()
