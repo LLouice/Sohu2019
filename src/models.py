@@ -1192,4 +1192,95 @@ class NetY4(BertPreTrainedModel):
         else:
             # 可以加ent_mask 也可以不加
             return logits_ent, logits_emo
+
+class NetY5_fz(BertPreTrainedModel):
+    '''
+    NeY3 的 freeze ent 版本
+    '''
+
+    def __init__(self, config, num_labels_ent, num_labels_emo, dp):
+        super(NetY5_fz, self).__init__(config)
+        self.num_labels_ent = num_labels_ent
+        self.num_labels_emo = num_labels_emo
+        self.bert = BertModel(config)
+        self.dp = dp
+        self.dropout = nn.Dropout(self.dp)
+        self.classifier_ent = nn.Linear(config.hidden_size * 2, num_labels_ent)
+        self.classifier_emo = nn.Linear(config.hidden_size * 2, num_labels_emo)
+        self.apply(self.init_bert_weights)
+
+    def _freeze(self):
+        print("freeze net5.................")
+        for idx, (n, m) in enumerate(self.named_modules()):
+            if idx <= 218:
+                for p in m.parameters():
+                    p.requires_grad = False
+                    if idx >= 215:
+                        print(idx, n, p.requires_grad)
+            else:
+                for p in m.parameters():
+                    p.requires_grad = True
+                print("not freeze: ", idx, n, p.requires_grad)
+        print("model freeze over!")
+
+    def freeze(self):
+        print("freeze net5.................")
+        for idx, (n, m) in enumerate(self.named_children()):
+            if idx <= 218:
+                for p in m.parameters():
+                    p.requires_grad = False
+                    if idx >= 215:
+                        print(idx, n, p.requires_grad)
+            else:
+                for p in m.parameters():
+                    p.requires_grad = True
+                print("not freeze: ", idx, n, p.requires_grad)
+        print("model freeze over!")
+
+    def unfreeze(self):
+        freeze_paras = []
+        for idx, (n, m) in enumerate(self.bert.named_modules()):
+            for p in m.parameters():
+                if not p.requires_grad:
+                    p.requires_grad = True
+                    freeze_paras.append(p)
+        print("unfreeze over")
+        return freeze_paras
+
+    def forward(self, input_ids, myinput_ids=None, token_type_ids=None, attention_mask=None, labels_ent=None,
+                labels_emo=None):
+        # _ is [CLS] 可以试试拼接在序列每个字上
+        sequence_output, CLS = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        # bs, 128 ,768   bs,768
+        # use repeat
+        CLS = CLS.repeat(1, sequence_output.size(1)).view(sequence_output.size())
+        sequence_output = torch.cat([sequence_output, CLS], dim=-1)
+        # sequence_output = self.dropout(sequence_output)
+        sequence_output = nn.Dropout(self.dp)(sequence_output)
+        logits_ent = self.classifier_ent(sequence_output)
+        logits_emo = self.classifier_emo(sequence_output)
+
+        if labels_ent is not None and labels_emo is not None:
+            # loss_fct = nn.CrossEntropyLoss()
+            # Only keep active parts of the loss, use 10 class !!!
+            if attention_mask is not None:
+                active_mask = attention_mask.view(-1) == 1
+                active_seg = token_type_ids.view(-1)[active_mask]
+                active_seg = active_seg == 0
+
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)[active_mask][active_seg]  # [L, C_ent]
+                active_labels_ent = labels_ent.view(-1)[active_mask][active_seg]  # [L, ]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)[active_mask][active_seg]  # [L, C_emo]
+                active_labels_emo = labels_emo.view(-1)[active_mask][active_seg]  # [L, ]
+                active_myinput_ids = myinput_ids.view(-1)[active_mask][active_seg]  # [L, ]
+            else:
+                active_logits_ent = logits_ent.view(-1, self.num_labels_ent)  # [L, C_ent]
+                active_logits_emo = logits_emo.view(-1, self.num_labels_emo)  # [ent_mask] #[L', ]
+                active_labels_emo = labels_emo.view(-1)
+                active_labels_ent = labels_ent.view(-1)
+                active_myinput_ids = myinput_ids.view(-1)
+            return active_logits_ent, active_labels_ent, active_logits_emo, active_labels_emo, active_myinput_ids
+        else:
+            # 可以加ent_mask 也可以不加
+            return logits_ent, logits_emo
 ###################################################################################################################
