@@ -19,7 +19,7 @@ from ignite.metrics import RunningAverage
 from ignite.contrib.handlers.tensorboard_logger import *
 from metric import FScore
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
-from models import NetY1, NetY2, NetY3, NetY3_fz, NetY4
+from models import NetY1, NetY2, NetY3, NetY3_fz, NetY4, NetY5_fz
 from loss import FocalLoss
 
 
@@ -108,14 +108,23 @@ def train():
                                           dp=args.dp)
 
     else:
-        model = NetY3_fz.from_pretrained(args.bert_model,
+        print("in net 5.................")
+        if args.net == "5":
+            model = NetY5_fz.from_pretrained(args.bert_model,
+                                             cache_dir="",
+                                             num_labels_ent=num_labels_ent,
+                                             num_labels_emo=num_labels_emo,
+                                             dp=args.dp)
+
+        else:
+            model = NetY3_fz.from_pretrained(args.bert_model,
                                          cache_dir="",
                                          num_labels_ent=num_labels_ent,
                                          num_labels_emo=num_labels_emo,
                                          dp=args.dp)
-        ########################### Freeze First ###################################
-        model.freeze()
-        print("freezed model")
+            ########################### Freeze First ###################################
+            model.freeze()
+            print("freezed model")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -258,12 +267,25 @@ def train():
 
         def step(engine, batch):
             if args.freeze_step > 0:
-                if engine.state.epoch - 1 == args.freeze_step:
-                    freeze_paras = model.module.unfreeze()
-                    # opt unfreeze
-                    optimizer.add_param_group({'params': freeze_paras})
-                    # run only once
-                    args.freeze_step = -1
+                if args.net != "5":
+                    if engine.state.epoch - 1 == args.freeze_step:
+                        freeze_paras = model.module.unfreeze()
+                        # opt unfreeze
+                        optimizer.add_param_group({'params': freeze_paras})
+                        # run only once
+                        args.freeze_step = -1
+                else:
+                    # print(f'in net 5, freeze_step:{args.freeze_step}, epos:{engine.state.epoch}')
+                    if engine.state.epoch  == args.freeze_step:
+                        # model.module.freeze()
+                        print("freeze net 5...")
+                        for param in model.module.bert.parameters():
+                            param.requires_grad = False
+                        for param in model.module.classifier_ent.parameters():
+                            param.requires_grad = False
+                        print("freeze net 5 over")
+                        args.freeze_step = -1
+
             if args.eval_radio > 0:
                 global iterations
                 iterations = len(trn_dataloader) // len(batch)
@@ -277,19 +299,24 @@ def train():
                 input_ids, myinput_ids, segment_ids, input_mask,
                 label_ent_ids, label_emo_ids)
             # Only keep active parts of the loss
-            if not args.wc:
-                loss_ent = criterion(act_logits_ent, act_y_ent)
-                loss_emo = criterion(act_logits_emo, act_y_emo)
-            else:
+            if  args.wc:
                 loss_ent = criterion_ent(act_logits_ent, act_y_ent)
                 loss_emo = criterion_emo(act_logits_emo, act_y_emo)
             # loss = alphas[engine.state.epoch-1] * loss_ent + loss_emo
             if not args.smooth_beta > 0:
                 if not args.multi:
-                    loss = alpha * loss_ent + loss_emo
+                    if not (args.net == "5" and args.freeze_step <0):
+                        loss_ent = criterion(act_logits_ent, act_y_ent)
+                        loss_emo = criterion(act_logits_emo, act_y_emo)
+                        loss = alpha * loss_ent + loss_emo
+                    else:
+                        loss_ent = torch.tensor([0])
+                        loss_emo = criterion(act_logits_emo, act_y_emo)
+                        # print("freeze net5 over")
+                        loss = loss_emo
                 else:
                     loss = loss_ent + alphas[engine.state.epoch - 1] * loss_emo
-            else:
+            else: # smooth
                 if not args.multi:
                     loss = alpha * loss_ent + loss_emo
                 else:
